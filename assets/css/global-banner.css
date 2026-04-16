@@ -1,0 +1,131 @@
+/**
+ * Hozio Image Optimizer - Global Queue Banner Styles
+ * Lightweight CSS for the progress banner on all admin pages.
+ */
+#hozio-global-banner {
+    display: none;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-left: 3px solid #6366f1;
+    border-radius: 6px;
+    padding: 10px 16px;
+    margin: 10px 20px 0 2px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+#hozio-global-banner.hgb-complete {
+    border-left-color: #22c55e;
+}
+
+.hgb-inner {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.hgb-icon {
+    width: 24px;
+    height: 24px;
+    background: #eff6ff;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.hgb-icon img {
+    width: 16px;
+    height: 16px;
+}
+
+.hgb-complete .hgb-icon {
+    background: #f0fdf4;
+}
+
+.hgb-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.hgb-text {
+    font-size: 12px;
+    font-weight: 600;
+    color: #111827;
+}
+
+.hgb-bar {
+    height: 3px;
+    background: #e5e7eb;
+    border-radius: 2px;
+    margin-top: 4px;
+    overflow: hidden;
+    max-width: 300px;
+}
+
+.hgb-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #6366f1, #8b5cf6);
+    border-radius: 2px;
+    transition: width 0.4s ease;
+}
+
+.hgb-complete .hgb-fill {
+    background: #22c55e;
+}
+
+.hgb-percent {
+    font-size: 11px;
+    font-weight: 700;
+    color: #6366f1;
+    flex-shrink: 0;
+}
+
+.hgb-complete .hgb-percent {
+    color: #22c55e;
+}
+
+.hgb-link {
+    font-size: 11px;
+    font-weight: 600;
+    color: #6366f1;
+    text-decoration: none;
+    padding: 4px 10px;
+    border: 1px solid #e0e7ff;
+    border-radius: 4px;
+    flex-shrink: 0;
+    transition: all 0.12s;
+}
+
+.hgb-link:hover {
+    background: #eff6ff;
+    border-color: #c7d2fe;
+    color: #4f46e5;
+}
+
+.hgb-dismiss {
+    background: none;
+    border: none;
+    color: #9ca3af;
+    cursor: pointer;
+    font-size: 16px;
+    padding: 0 4px;
+    flex-shrink: 0;
+}
+
+.hgb-dismiss:hover {
+    color: #6b7280;
+}
+
+/* Broken images alert banner */
+.hgb-broken-alert {
+    background: #fff;
+    border: 1px solid #fecaca;
+    border-left: 3px solid #ef4444;
+    border-radius: 6px;
+    padding: 10px 16px;
+    margin: 10px 20px 0 2px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}

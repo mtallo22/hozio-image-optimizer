@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(tar:*)",
+      "Bash(gzip:*)",
+      "Bash(python create_zip.py:*)",
+      "Bash(python:*)"
+    ]
+  }
+}
