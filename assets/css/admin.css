@@ -7288,15 +7288,19 @@
 /* ---- Settings content + panel show/hide ---- */
 .hozio-settings-page.hz-v2 .hz-settings-content {
     min-width: 0;
+    width: 100%;
 }
 .hozio-settings-page.hz-v2 .hozio-settings-main {
+    width: 100%;
     max-width: 100%;
 }
 .hozio-settings-page.hz-v2 .hz-tab-panel {
     display: none;
+    width: 100%;
 }
 .hozio-settings-page.hz-v2 .hz-tab-panel.hz-active {
     display: block;
+    width: 100%;
     animation: hz-panel-fade 0.18s ease-out;
 }
 @keyframes hz-panel-fade {
@@ -7434,8 +7438,10 @@
     border-color: rgba(255,255,255,0.2);
 }
 
-/* ---- Command palette modal ---- */
-.hozio-settings-page.hz-v2 .hz-palette {
+/* ---- Command palette modal ----
+   Scoped to body (not .hz-v2) because the element is teleported to <body>
+   via JS so that position:fixed works correctly inside WP admin containers. */
+#hz-palette {
     position: fixed;
     inset: 0;
     z-index: 100000;
@@ -7443,20 +7449,21 @@
     align-items: flex-start;
     justify-content: center;
     padding-top: 15vh;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
-.hozio-settings-page.hz-v2 .hz-palette[hidden] {
+#hz-palette[hidden] {
     display: none;
 }
-.hozio-settings-page.hz-v2 .hz-palette-backdrop {
+#hz-palette .hz-palette-backdrop {
     position: absolute;
     inset: 0;
     background: rgba(17, 24, 39, 0.55);
     backdrop-filter: blur(2px);
 }
-.hozio-settings-page.hz-v2 .hz-palette-panel {
+#hz-palette .hz-palette-panel {
     position: relative;
     width: min(640px, 92vw);
-    background: var(--hz-surface);
+    background: #ffffff;
     border-radius: 12px;
     box-shadow: 0 20px 50px rgba(0,0,0,0.25);
     overflow: hidden;
@@ -7464,93 +7471,109 @@
     flex-direction: column;
     max-height: 70vh;
 }
-.hozio-settings-page.hz-v2 .hz-palette-search {
+#hz-palette .hz-palette-search {
     display: flex;
     align-items: center;
     gap: 10px;
     padding: 12px 14px;
-    border-bottom: 1px solid var(--hz-border);
+    border-bottom: 1px solid #e5e7eb;
 }
-.hozio-settings-page.hz-v2 .hz-palette-search .dashicons {
-    color: var(--hz-muted);
+#hz-palette .hz-palette-search .dashicons {
+    color: #6b7280;
     font-size: 18px;
     width: 18px;
     height: 18px;
 }
-.hozio-settings-page.hz-v2 #hz-palette-input {
+#hz-palette-input {
     flex: 1;
     border: none;
     outline: none;
     font-size: 14px;
     background: transparent;
-    color: var(--hz-text);
+    color: #111827;
     padding: 2px 0;
+    font-family: inherit;
 }
-.hozio-settings-page.hz-v2 .hz-palette-close {
+#hz-palette .hz-palette-close {
     background: none;
     border: none;
     padding: 0;
     cursor: pointer;
 }
-.hozio-settings-page.hz-v2 .hz-palette-results {
+#hz-palette .hz-palette-results {
     flex: 1 1 auto;
     overflow-y: auto;
     padding: 4px;
 }
-.hozio-settings-page.hz-v2 .hz-palette-item {
+#hz-palette .hz-palette-item {
     display: flex;
     align-items: center;
     gap: 10px;
     padding: 8px 10px;
-    border-radius: var(--hz-radius-sm);
+    border-radius: 6px;
     cursor: pointer;
     font-size: 13px;
-    color: var(--hz-text-2);
+    color: #374151;
+    transition: background 0.1s;
 }
-.hozio-settings-page.hz-v2 .hz-palette-item .dashicons {
-    color: var(--hz-muted);
+#hz-palette .hz-palette-item .dashicons {
+    color: #6b7280;
     font-size: 16px;
     width: 16px;
     height: 16px;
 }
-.hozio-settings-page.hz-v2 .hz-palette-item-label {
+#hz-palette .hz-palette-item-label {
     flex: 1;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
-.hozio-settings-page.hz-v2 .hz-palette-item-tab {
+#hz-palette .hz-palette-item-tab {
     font-size: 10.5px;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    color: var(--hz-muted);
-    background: var(--hz-surface-2);
+    color: #6b7280;
+    background: #f3f4f6;
     padding: 2px 6px;
     border-radius: 4px;
+    white-space: nowrap;
 }
-.hozio-settings-page.hz-v2 .hz-palette-item.hz-active,
-.hozio-settings-page.hz-v2 .hz-palette-item:hover {
+#hz-palette .hz-palette-item.hz-active,
+#hz-palette .hz-palette-item:hover {
     background: #eef2ff;
-    color: var(--hz-accent);
+    color: #4f46e5;
 }
-.hozio-settings-page.hz-v2 .hz-palette-empty {
+#hz-palette .hz-palette-item.hz-active .dashicons,
+#hz-palette .hz-palette-item:hover .dashicons {
+    color: #4f46e5;
+}
+#hz-palette .hz-palette-empty {
     padding: 24px 14px;
     text-align: center;
-    color: var(--hz-muted);
+    color: #6b7280;
     font-size: 12.5px;
 }
-.hozio-settings-page.hz-v2 .hz-palette-hint {
+#hz-palette .hz-palette-hint {
     display: flex;
     justify-content: flex-start;
     gap: 16px;
     padding: 8px 14px;
-    border-top: 1px solid var(--hz-border);
+    border-top: 1px solid #e5e7eb;
     font-size: 11px;
-    color: var(--hz-muted);
+    color: #6b7280;
 }
-.hozio-settings-page.hz-v2 .hz-palette-hint .hz-kbd {
+#hz-palette .hz-kbd {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 10px;
+    font-weight: 600;
+    color: #6b7280;
+    background: #f3f4f6;
+    border: 1px solid #e5e7eb;
+    border-radius: 4px;
+    padding: 1px 5px;
+    line-height: 1.5;
     margin-right: 2px;
 }
 

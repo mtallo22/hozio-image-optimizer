@@ -415,17 +415,24 @@
         var paletteActive = 0;
         var paletteMatches = [];
         var paletteLastFocus = null;
+        var paletteMoved = false;
 
         function openPalette() {
             if (!$palette.length) return;
+            // Teleport to <body> once so position:fixed isn't clipped by WP containers
+            if (!paletteMoved) {
+                $palette.appendTo('body');
+                paletteMoved = true;
+            }
             if (!paletteIndex.length) buildPaletteIndex();
             paletteLastFocus = document.activeElement;
-            $palette.removeAttr('hidden');
-            $paletteInput.val('').trigger('input').focus();
+            $palette.removeAttr('hidden').addClass('hz-palette-open');
+            $paletteInput.val('').trigger('input');
+            setTimeout(function() { $paletteInput.focus(); }, 30);
         }
         function closePalette() {
             if (!$palette.length) return;
-            $palette.attr('hidden', true);
+            $palette.attr('hidden', true).removeClass('hz-palette-open');
             if (paletteLastFocus && paletteLastFocus.focus) {
                 try { paletteLastFocus.focus(); } catch (err) {}
             }
