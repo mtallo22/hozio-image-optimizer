@@ -1,25 +1,29 @@
 # ============================================================
 # Hozio Image Optimizer — Build Release ZIP
 # ============================================================
-# Usage: .\build-zip.ps1
-#
-# This creates a properly structured ZIP for GitHub releases.
-# The ZIP will contain: hozio-image-optimizer/[all plugin files]
-#
-# IMPORTANT: Uses System.IO.Compression.ZipFile, NOT Compress-Archive
-# (Compress-Archive creates ZIPs that WordPress can't extract properly)
+# MUST use System.IO.Compression.ZipFile with forward slashes.
+# NEVER use Compress-Archive (creates backslash paths that break on Linux).
 # ============================================================
 
-$ErrorActionPreference = "Stop"
+Add-Type -AssemblyName System.IO.Compression
+Add-Type -AssemblyName System.IO.Compression.FileSystem
 
-# Config
 $pluginSlug = "hozio-image-optimizer"
-$pluginDir  = Split-Path -Parent $MyInvocation.MyCommand.Path
-$buildDir   = Join-Path $pluginDir "build"
-$stageDir   = Join-Path $buildDir $pluginSlug
+$srcDir     = Split-Path -Parent $MyInvocation.MyCommand.Path
+$zipPath    = Join-Path $srcDir "$pluginSlug.zip"
+
+# Files/folders to EXCLUDE from the ZIP
+$excludeNames = @(
+    ".git", ".gitignore", ".claude", ".vscode", ".idea",
+    "build-zip.ps1", "RELEASE.md", "UPDATER-SETUP.md", "README.md",
+    "node_modules", "build", "releases",
+    ".DS_Store", "Thumbs.db", "desktop.ini"
+)
+
+$excludeExtensions = @(".zip", ".log", ".tmp", ".bak", ".swp")
 
 # Read version from plugin header
-$mainFile = Join-Path $pluginDir "hozio-image-optimizer.php"
+$mainFile = Join-Path $srcDir "$pluginSlug.php"
 $versionLine = Select-String -Path $mainFile -Pattern "^\s*\*\s*Version:\s*(.+)" | Select-Object -First 1
 if ($versionLine) {
     $version = $versionLine.Matches[0].Groups[1].Value.Trim()
@@ -28,112 +32,80 @@ if ($versionLine) {
     exit 1
 }
 
-$zipName = "$pluginSlug.zip"
-$zipPath = Join-Path $pluginDir $zipName
-
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "  Building $pluginSlug v$version" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host ""
 
-# Clean previous build
-if (Test-Path $buildDir) {
-    Remove-Item $buildDir -Recurse -Force
-}
-if (Test-Path $zipPath) {
-    Remove-Item $zipPath -Force
-}
+# Remove old ZIP
+if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
 
-# Create staging directory
-New-Item -ItemType Directory -Path $stageDir -Force | Out-Null
+# Create ZIP with forward slashes
+$zip = [System.IO.Compression.ZipFile]::Open($zipPath, 'Create')
+$fileCount = 0
 
-# Files and folders to EXCLUDE from the ZIP
-$excludes = @(
-    ".git",
-    ".gitignore",
-    ".claude",
-    "build",
-    "build-zip.ps1",
-    "RELEASE.md",
-    "UPDATER-SETUP.md",
-    "README.md",
-    "*.zip",
-    ".vscode",
-    ".idea",
-    "node_modules",
-    "*.log",
-    ".DS_Store",
-    "Thumbs.db"
-)
+# Get all files recursively
+Get-ChildItem $srcDir -Recurse -File -Force | ForEach-Object {
+    $relativePath = $_.FullName.Substring($srcDir.Length + 1)
 
-# Copy files to staging, excluding unwanted items
-Write-Host "Copying files to staging..." -ForegroundColor Yellow
-
-Get-ChildItem -Path $pluginDir -Recurse -Force | ForEach-Object {
-    $relativePath = $_.FullName.Substring($pluginDir.Length + 1)
-
-    # Check if this path matches any exclude pattern
+    # Check excludes
     $skip = $false
-    foreach ($exclude in $excludes) {
-        if ($relativePath -like "$exclude*" -or $relativePath -like "*\$exclude*" -or $_.Name -like $exclude) {
+
+    # Check if any parent folder or the file itself is in exclude list
+    foreach ($exc in $excludeNames) {
+        if ($relativePath -like "$exc\*" -or $relativePath -like "*\$exc\*" -or $_.Name -eq $exc -or $_.Directory.Name -eq $exc) {
             $skip = $true
             break
         }
     }
 
+    # Check file extension
     if (-not $skip) {
-        $destPath = Join-Path $stageDir $relativePath
-        if ($_.PSIsContainer) {
-            if (-not (Test-Path $destPath)) {
-                New-Item -ItemType Directory -Path $destPath -Force | Out-Null
+        foreach ($ext in $excludeExtensions) {
+            if ($_.Extension -eq $ext) {
+                $skip = $true
+                break
             }
-        } else {
-            $destDir = Split-Path $destPath -Parent
-            if (-not (Test-Path $destDir)) {
-                New-Item -ItemType Directory -Path $destDir -Force | Out-Null
-            }
-            Copy-Item $_.FullName $destPath -Force
         }
+    }
+
+    # Skip the root .git folder and anything inside it
+    if ($relativePath.StartsWith(".git\") -or $relativePath.StartsWith(".git/")) {
+        $skip = $true
+    }
+
+    if (-not $skip) {
+        # CRITICAL: Use forward slashes for Linux compatibility
+        $entryName = "$pluginSlug/" + ($relativePath -replace '\\', '/')
+
+        $entry = $zip.CreateEntry($entryName)
+        $stream = $entry.Open()
+        $bytes = [System.IO.File]::ReadAllBytes($_.FullName)
+        $stream.Write($bytes, 0, $bytes.Length)
+        $stream.Close()
+        $fileCount++
     }
 }
 
-# Count files
-$fileCount = (Get-ChildItem -Path $stageDir -Recurse -File).Count
-Write-Host "Staged $fileCount files" -ForegroundColor Green
-
-# Create ZIP using System.IO.Compression (NOT Compress-Archive!)
-Write-Host "Creating ZIP archive..." -ForegroundColor Yellow
-
-Add-Type -AssemblyName System.IO.Compression.FileSystem
-[System.IO.Compression.ZipFile]::CreateFromDirectory(
-    $buildDir,
-    $zipPath,
-    [System.IO.Compression.CompressionLevel]::Optimal,
-    $false  # includeBaseDirectory = false (the folder IS the base)
-)
+$zip.Dispose()
 
 # Verify
 if (Test-Path $zipPath) {
     $size = [math]::Round((Get-Item $zipPath).Length / 1MB, 2)
     Write-Host ""
     Write-Host "========================================" -ForegroundColor Green
-    Write-Host "  SUCCESS: $zipName ($size MB)" -ForegroundColor Green
+    Write-Host "  SUCCESS" -ForegroundColor Green
+    Write-Host "  File:    $pluginSlug.zip ($size MB)" -ForegroundColor Green
     Write-Host "  Version: $version" -ForegroundColor Green
     Write-Host "  Files:   $fileCount" -ForegroundColor Green
     Write-Host "========================================" -ForegroundColor Green
     Write-Host ""
-    Write-Host "Next steps:" -ForegroundColor Cyan
-    Write-Host "  1. git add -A && git commit -m 'v$version'" -ForegroundColor White
+    Write-Host "Next steps:" -ForegroundColor Yellow
+    Write-Host "  1. git add -A && git commit -m `"v${version}`"" -ForegroundColor White
     Write-Host "  2. git push origin main" -ForegroundColor White
-    Write-Host "  3. gh release create v$version $zipName --title 'v$version'" -ForegroundColor White
+    Write-Host "  3. gh release create v${version} ${pluginSlug}.zip --title `"v${version}`"" -ForegroundColor White
     Write-Host ""
 } else {
     Write-Error "ZIP creation failed!"
     exit 1
 }
-
-# Clean up staging
-Remove-Item $buildDir -Recurse -Force
-
-Write-Host "Done!" -ForegroundColor Green
