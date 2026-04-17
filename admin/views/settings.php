@@ -28,6 +28,13 @@ $system_stats = array(
 
 <div class="wrap hozio-settings-page hz-v2">
 
+    <?php if ( isset( $_GET['settings-updated'] ) ) : ?>
+    <div class="hz-saved-banner" id="hz-saved-banner" role="status" aria-live="polite">
+        <span class="dashicons dashicons-yes-alt"></span>
+        <?php esc_html_e( 'Settings saved successfully.', 'hozio-image-optimizer' ); ?>
+    </div>
+    <?php endif; ?>
+
     <!-- Top Bar -->
     <div class="hz-topbar">
         <div class="hz-topbar-left">

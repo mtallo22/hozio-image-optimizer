@@ -7198,6 +7198,20 @@
     --hz-sidebar-w: 240px;
 }
 
+/* Remove WP's default 20px left padding on #wpcontent for our pages */
+body.settings_page_hozio-image-optimizer-settings #wpcontent,
+body.media_page_hozio-image-optimizer #wpcontent,
+body.media_page_hozio-image-backups #wpcontent {
+    padding-left: 0 !important;
+}
+
+/* Prevent horizontal scroll on our pages */
+body.settings_page_hozio-image-optimizer-settings #wpbody-content,
+body.media_page_hozio-image-optimizer #wpbody-content,
+body.media_page_hozio-image-backups #wpbody-content {
+    overflow-x: hidden;
+}
+
 /* Neutralize WP default wrap horizontal padding / margins so our layout can
    go edge-to-edge inside the admin body. */
 .hozio-settings-page.hz-v2 {
@@ -7207,9 +7221,43 @@
 }
 
 /* Keep WP footer below the settings page content */
-body.toplevel_page_hozio-image-optimizer #wpfooter {
+body.toplevel_page_hozio-image-optimizer #wpfooter,
+body.settings_page_hozio-image-optimizer-settings #wpfooter {
     position: static !important;
     margin-top: 40px;
+}
+
+/* Full-width settings-saved banner */
+.hozio-settings-page.hz-v2 .hz-saved-banner {
+    position: fixed;
+    top: 32px;
+    left: 0;
+    right: 0;
+    z-index: 99999;
+    background: #00a32a;
+    color: #fff;
+    padding: 13px 24px;
+    font-size: 14px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.25);
+    animation: hz-banner-in .25s ease, hz-banner-out .4s ease 3s forwards;
+}
+
+@keyframes hz-banner-in {
+    from { opacity: 0; transform: translateY(-100%); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes hz-banner-out {
+    to { opacity: 0; transform: translateY(-100%); pointer-events: none; }
+}
+
+/* Hide WP's own "Settings saved." notice — our banner replaces it */
+body.settings_page_hozio-image-optimizer-settings .notice.settings-error.notice-success {
+    display: none !important;
 }
 
 /* ---- Top bar ---- */
@@ -7765,9 +7813,6 @@ body.toplevel_page_hozio-image-optimizer #wpfooter {
     border-radius: var(--hz-radius);
     padding: 14px 18px;
     margin-bottom: 14px;
-    position: sticky;
-    top: 42px;
-    z-index: 5;
 }
 .hozio-settings-page.hz-v2 .hz-preview-head {
     display: flex;
