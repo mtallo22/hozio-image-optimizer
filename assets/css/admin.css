@@ -7812,7 +7812,7 @@ body.settings_page_hozio-image-optimizer-settings .notice.settings-error.notice-
     border-left: 3px solid var(--hz-accent);
     border-radius: var(--hz-radius);
     padding: 14px 18px;
-    margin-bottom: 14px;
+    margin-bottom: 40px;
 }
 .hozio-settings-page.hz-v2 .hz-preview-head {
     display: flex;
