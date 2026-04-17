@@ -672,22 +672,30 @@ $system_stats = array(
                 <div class="hz-preview-card" id="hz-naming-preview" data-search-keywords="preview filename example template live">
                     <div class="hz-preview-head">
                         <span class="dashicons dashicons-visibility"></span>
-                        <span class="hz-preview-title"><?php esc_html_e('Live preview', 'hozio-image-optimizer'); ?></span>
+                        <span class="hz-preview-label"><?php esc_html_e('Live Preview', 'hozio-image-optimizer'); ?></span>
                         <span class="hz-chip hz-chip-ok hz-chip-sm"><?php esc_html_e('Sample image', 'hozio-image-optimizer'); ?></span>
                     </div>
-                    <dl class="hz-preview-grid">
-                        <dt><?php esc_html_e('Template', 'hozio-image-optimizer'); ?></dt>
-                        <dd><code class="hz-preview-template" id="hz-preview-filename-template"><?php echo esc_html(get_option('hozio_naming_template', '{keyword}-{location}')); ?></code></dd>
-
-                        <dt><?php esc_html_e('Filename', 'hozio-image-optimizer'); ?></dt>
-                        <dd><code class="hz-preview-output" id="hz-preview-filename-output">&mdash;</code></dd>
-
-                        <dt><?php esc_html_e('Title template', 'hozio-image-optimizer'); ?></dt>
-                        <dd><code class="hz-preview-template" id="hz-preview-title-template"><?php echo esc_html(get_option('hozio_title_template', 'Professional {keyword} in {location}')); ?></code></dd>
-
-                        <dt><?php esc_html_e('Title', 'hozio-image-optimizer'); ?></dt>
-                        <dd class="hz-preview-title-output" id="hz-preview-title-output">&mdash;</dd>
-                    </dl>
+                    <div class="hz-preview-body">
+                        <div class="hz-preview-col">
+                            <div class="hz-preview-col-head">
+                                <span class="dashicons dashicons-media-default"></span>
+                                <?php esc_html_e('Filename', 'hozio-image-optimizer'); ?>
+                            </div>
+                            <code class="hz-preview-template" id="hz-preview-filename-template"><?php echo esc_html(get_option('hozio_naming_template', '{keyword}-{location}')); ?></code>
+                            <span class="hz-preview-arrow">&#x2193;</span>
+                            <code class="hz-preview-output" id="hz-preview-filename-output">&mdash;</code>
+                        </div>
+                        <div class="hz-preview-sep"></div>
+                        <div class="hz-preview-col">
+                            <div class="hz-preview-col-head">
+                                <span class="dashicons dashicons-editor-textcolor"></span>
+                                <?php esc_html_e('Alt Title', 'hozio-image-optimizer'); ?>
+                            </div>
+                            <code class="hz-preview-template" id="hz-preview-title-template"><?php echo esc_html(get_option('hozio_title_template', 'Professional {keyword} in {location}')); ?></code>
+                            <span class="hz-preview-arrow">&#x2193;</span>
+                            <span class="hz-preview-title-output" id="hz-preview-title-output">&mdash;</span>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Naming Tab -->

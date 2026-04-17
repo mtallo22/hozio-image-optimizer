@@ -3636,49 +3636,203 @@
 .hz-settings-content .template-options-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+}
+
+.hz-settings-content .template-option {
+    display: block;
+    cursor: pointer;
+    position: relative;
+}
+
+.hz-settings-content .template-option input[type="radio"] {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.hz-settings-content .template-option-content {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 14px;
+    min-height: 104px;
+    background: #fff;
+    border: 2px solid #e5e7eb;
+    border-radius: 10px;
+    transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+    overflow: hidden;
+}
+
+.hz-settings-content .template-option:hover .template-option-content {
+    border-color: #c7d2fe;
+    background: #fafbff;
+}
+
+.hz-settings-content .template-option.selected .template-option-content {
+    border-color: #6366f1;
+    background: #f5f3ff;
+    box-shadow: 0 0 0 3px rgba(99,102,241,0.10);
+}
+
+/* Icon badge */
+.hz-settings-content .template-option-content > .dashicons {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    width: 34px !important;
+    height: 34px !important;
+    font-size: 17px !important;
+    background: #ede9fe;
+    color: #6366f1 !important;
+    border-radius: 8px;
+    flex-shrink: 0;
+    transition: background 0.15s, color 0.15s;
+}
+
+.hz-settings-content .template-option.selected .template-option-content > .dashicons {
+    background: #6366f1;
+    color: #fff !important;
+}
+
+/* Text */
+.hz-settings-content .template-option-text {
+    width: 100%;
+    min-width: 0;
+}
+
+.hz-settings-content .template-option-text .template-label {
+    display: block;
+    font-weight: 700;
+    font-size: 12.5px;
+    color: #1e293b;
+    line-height: 1.3;
+    margin-bottom: 3px;
+}
+
+.hz-settings-content .template-option-text .template-example {
+    display: block;
+    font-size: 11px;
+    color: #94a3b8;
+    font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+    background: transparent;
+    padding: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+    border: none;
+}
+
+.hz-settings-content .template-hint {
+    display: block;
+    font-size: 11px;
+    color: #94a3b8;
+    font-style: italic;
+}
+
+/* Check circle — absolute top-right */
+.hz-settings-content .template-check {
+    position: absolute !important;
+    top: 10px;
+    right: 10px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 2px solid #e2e8f0;
+    background: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+    flex-shrink: 0;
+}
+
+.hz-settings-content .template-check svg {
+    opacity: 0;
+    width: 10px !important;
+    height: 10px !important;
+    stroke: #fff;
+    transition: opacity 0.15s;
+}
+
+.hz-settings-content .template-option.selected .template-check {
+    background: #6366f1;
+    border-color: #6366f1;
+}
+
+.hz-settings-content .template-option.selected .template-check svg {
+    opacity: 1;
+}
+
+/* Custom option — dashed border */
+.hz-settings-content .template-option-custom .template-option-content {
+    border-style: dashed;
+}
+
+/* --- Title Option Cards --- */
+.hz-settings-content .title-options-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
     gap: 8px;
 }
 
-.hz-settings-content .template-option,
-.hz-settings-content .template-option-custom {
-    border: 1px solid #e5e7eb;
-    border-radius: 8px;
-    padding: 10px 12px;
-    cursor: pointer;
-    transition: all 0.12s;
-    background: #fff;
-    font-size: 11px;
-}
-
-.hz-settings-content .template-option:hover,
-.hz-settings-content .template-option-custom:hover {
-    border-color: #c7d2fe;
-    background: #fafafe;
-}
-
-.hz-settings-content .template-option.selected {
-    border-color: #6366f1;
-    background: #f5f3ff;
-}
-
 .hz-settings-content .title-option {
-    border: 1px solid #e5e7eb;
-    border-radius: 8px;
-    padding: 10px 12px;
+    display: block;
     cursor: pointer;
-    transition: all 0.12s;
+}
+
+.hz-settings-content .title-option input[type="radio"] {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.hz-settings-content .title-option-content {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    padding: 12px 14px;
+    min-height: 58px;
     background: #fff;
-    font-size: 11px;
-    text-align: center;
+    border: 2px solid #e5e7eb;
+    border-radius: 8px;
+    transition: border-color 0.15s, background 0.15s;
 }
 
-.hz-settings-content .title-option:hover {
+.hz-settings-content .title-option:hover .title-option-content {
     border-color: #c7d2fe;
+    background: #fafbff;
 }
 
-.hz-settings-content .title-option.selected {
+.hz-settings-content .title-option.selected .title-option-content {
     border-color: #6366f1;
     background: #f5f3ff;
+    box-shadow: 0 0 0 3px rgba(99,102,241,0.10);
+}
+
+.hz-settings-content .title-option-label {
+    font-weight: 700;
+    font-size: 12px;
+    color: #1e293b;
+    display: block;
+}
+
+.hz-settings-content .title-option-example {
+    font-size: 10.5px;
+    color: #94a3b8;
+    font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+    background: transparent;
+    padding: 0;
+    border: none;
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
 }
 
 /* --- Server Capabilities --- */
@@ -4231,12 +4385,7 @@
     gap: 12px;
 }
 
-/* Template options grid - responsive */
-.hz-settings-content .template-options-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 10px;
-}
+/* Template options grid — locked to 3 columns, handled above */
 
 /* Title template options - responsive */
 .hz-settings-content .title-option,
@@ -7614,8 +7763,8 @@ body.toplevel_page_hozio-image-optimizer #wpfooter {
     border: 1px solid var(--hz-border);
     border-left: 3px solid var(--hz-accent);
     border-radius: var(--hz-radius);
-    padding: 12px 14px;
-    margin-bottom: 12px;
+    padding: 14px 18px;
+    margin-bottom: 14px;
     position: sticky;
     top: 42px;
     z-index: 5;
@@ -7624,7 +7773,7 @@ body.toplevel_page_hozio-image-optimizer #wpfooter {
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-bottom: 10px;
+    margin-bottom: 14px;
 }
 .hozio-settings-page.hz-v2 .hz-preview-head .dashicons {
     color: var(--hz-accent);
@@ -7632,44 +7781,69 @@ body.toplevel_page_hozio-image-optimizer #wpfooter {
     width: 16px;
     height: 16px;
 }
-.hozio-settings-page.hz-v2 .hz-preview-title {
-    font-size: 12px;
+.hozio-settings-page.hz-v2 .hz-preview-label {
+    font-size: 11px;
     font-weight: 700;
     color: var(--hz-text);
     text-transform: uppercase;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.06em;
     flex: 1;
 }
-.hozio-settings-page.hz-v2 .hz-preview-grid {
-    display: grid;
-    grid-template-columns: 120px 1fr;
-    gap: 6px 12px;
-    margin: 0;
+/* Two-column preview body */
+.hozio-settings-page.hz-v2 .hz-preview-body {
+    display: flex;
+    align-items: stretch;
 }
-.hozio-settings-page.hz-v2 .hz-preview-grid dt {
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--hz-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    align-self: center;
-}
-.hozio-settings-page.hz-v2 .hz-preview-grid dd {
-    margin: 0;
-    font-size: 13px;
-    color: var(--hz-text);
+.hozio-settings-page.hz-v2 .hz-preview-col {
+    flex: 1;
     min-width: 0;
-    overflow-wrap: anywhere;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.hozio-settings-page.hz-v2 .hz-preview-sep {
+    width: 1px;
+    background: var(--hz-border);
+    margin: 0 20px;
+    flex-shrink: 0;
+}
+.hozio-settings-page.hz-v2 .hz-preview-col-head {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--hz-muted);
+    margin-bottom: 2px;
+}
+.hozio-settings-page.hz-v2 .hz-preview-col-head .dashicons {
+    font-size: 13px;
+    width: 13px;
+    height: 13px;
+    color: var(--hz-accent);
+}
+.hozio-settings-page.hz-v2 .hz-preview-arrow {
+    font-size: 14px;
+    color: var(--hz-border);
+    line-height: 1;
+    margin: -2px 0;
+    user-select: none;
 }
 .hozio-settings-page.hz-v2 .hz-preview-template,
 .hozio-settings-page.hz-v2 .hz-preview-output {
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    font-size: 12.5px;
+    font-size: 12px;
     background: var(--hz-surface-2);
-    padding: 3px 6px;
+    padding: 3px 7px;
     border-radius: 4px;
     border: 1px solid var(--hz-border);
-    display: inline-block;
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
 }
 .hozio-settings-page.hz-v2 .hz-preview-output {
     color: var(--hz-accent);
@@ -7678,8 +7852,13 @@ body.toplevel_page_hozio-image-optimizer #wpfooter {
     font-weight: 600;
 }
 .hozio-settings-page.hz-v2 .hz-preview-title-output {
-    font-weight: 600;
+    font-weight: 700;
+    font-size: 13px;
     color: var(--hz-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;
 }
 
 /* ---- License card styling (v2 scope) ---- */
@@ -7804,5 +7983,17 @@ body.toplevel_page_hozio-image-optimizer #wpfooter {
     }
     .hozio-settings-page.hz-v2 .hz-preview-card {
         position: static;
+    }
+    .hozio-settings-page.hz-v2 .hz-preview-body {
+        flex-direction: column;
+        gap: 12px;
+    }
+    .hozio-settings-page.hz-v2 .hz-preview-sep {
+        width: 100%;
+        height: 1px;
+        margin: 0;
+    }
+    .hz-settings-content .template-options-grid {
+        grid-template-columns: 1fr;
     }
 }
