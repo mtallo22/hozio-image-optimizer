@@ -1734,10 +1734,20 @@ class Hozio_Image_Optimizer_Ajax_Handler {
         $update_available = isset($update_plugins->response[$plugin_file]);
         $latest_version = $update_available ? $update_plugins->response[$plugin_file]->new_version : HOZIO_IMAGE_OPTIMIZER_VERSION;
 
+        // Generate WordPress built-in upgrade URL (same pattern as Hozio Pro)
+        $update_url = '';
+        if ($update_available) {
+            $update_url = wp_nonce_url(
+                admin_url('update.php?action=upgrade-plugin&plugin=' . urlencode($plugin_file)),
+                'upgrade-plugin_' . $plugin_file
+            );
+        }
+
         wp_send_json_success(array(
             'update_available' => $update_available,
             'latest_version' => $latest_version,
             'current_version' => HOZIO_IMAGE_OPTIMIZER_VERSION,
+            'update_url' => $update_url,
         ));
     }
 

@@ -248,7 +248,7 @@ class Hozio_ImgOpt_Updater {
             $links[] = '<a href="' . $settings_url . '" style="color:#d63638;">Enter License</a>';
         }
 
-        $links[] = '<a href="' . wp_nonce_url(admin_url('plugins.php?hozio_imgopt_check_update=1'), 'hozio_check_update') . '">Check for Updates</a>';
+        $links[] = '<a href="' . $settings_url . '">Updates</a>';
 
         return $links;
     }

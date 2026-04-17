@@ -2072,26 +2072,42 @@ $capabilities = Hozio_Image_Optimizer::get_server_capabilities();
                             <button type="button" id="hozio-check-update-btn" class="hz-btn hz-btn-ghost" style="font-size:11px;">
                                 <span class="dashicons dashicons-update" style="font-size:14px;width:14px;height:14px;"></span> <?php esc_html_e('Check Now', 'hozio-image-optimizer'); ?>
                             </button>
-                            <script>
-                            jQuery('#hozio-check-update-btn').on('click', function() {
-                                var btn = jQuery(this);
-                                btn.prop('disabled', true).find('.dashicons').addClass('spin');
-                                jQuery.post(ajaxurl, {
-                                    action: 'hozio_force_update_check',
-                                    nonce: '<?php echo esc_js(wp_create_nonce('hozio_image_optimizer_nonce')); ?>'
-                                }, function(response) {
-                                    btn.prop('disabled', false).find('.dashicons').removeClass('spin');
-                                    if (response.success) {
-                                        btn.closest('div').find('strong').text('Just now');
-                                        if (response.data.update_available) {
-                                            alert('Update available! Version ' + response.data.latest_version + ' is ready. Go to Plugins page to update.');
-                                        } else {
-                                            alert('You are running the latest version (v<?php echo esc_js(HOZIO_IMAGE_OPTIMIZER_VERSION); ?>).');
-                                        }
+                        </div>
+                        <div id="hozio-update-result" style="margin-top:8px;"></div>
+                        <script>
+                        jQuery('#hozio-check-update-btn').on('click', function() {
+                            var btn = jQuery(this);
+                            var result = jQuery('#hozio-update-result');
+                            btn.prop('disabled', true).find('.dashicons').addClass('spin');
+                            result.html('<span style="font-size:11px;color:#6b7280;">Checking for updates...</span>');
+
+                            jQuery.post(ajaxurl, {
+                                action: 'hozio_force_update_check',
+                                nonce: '<?php echo esc_js(wp_create_nonce('hozio_image_optimizer_nonce')); ?>'
+                            }, function(response) {
+                                btn.prop('disabled', false).find('.dashicons').removeClass('spin');
+                                btn.closest('.hz-license-card').find('strong').first().text('Just now');
+
+                                if (response.success) {
+                                    if (response.data.update_available) {
+                                        result.html(
+                                            '<div style="padding:10px 14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;display:flex;align-items:center;justify-content:space-between;">' +
+                                            '<span style="font-size:12px;color:#16a34a;font-weight:600;">Update available: v' + response.data.latest_version + '</span>' +
+                                            '<a href="' + response.data.update_url + '" class="hz-btn hz-btn-primary" style="font-size:11px;padding:6px 14px;text-decoration:none;">Update Now</a>' +
+                                            '</div>'
+                                        );
+                                    } else {
+                                        result.html('<span style="font-size:11px;color:#16a34a;font-weight:600;">&#10003; You are running the latest version (v<?php echo esc_js(HOZIO_IMAGE_OPTIMIZER_VERSION); ?>)</span>');
                                     }
-                                });
+                                } else {
+                                    result.html('<span style="font-size:11px;color:#ef4444;">Failed to check for updates</span>');
+                                }
+                            }).fail(function() {
+                                btn.prop('disabled', false).find('.dashicons').removeClass('spin');
+                                result.html('<span style="font-size:11px;color:#ef4444;">Connection error</span>');
                             });
-                            </script>
+                        });
+                        </script>
                         </div>
 
                         <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-top:1px solid #f3f4f6;">
