@@ -72,6 +72,7 @@ class Hozio_Image_Optimizer_Ajax_Handler {
         add_action('wp_ajax_hozio_resolve_broken_image', array($this, 'resolve_broken_image'));
         add_action('wp_ajax_hozio_dismiss_broken_banner', array($this, 'dismiss_broken_banner'));
         add_action('wp_ajax_hozio_force_update_check', array($this, 'force_update_check'));
+        add_action('wp_ajax_hozio_save_auto_update', array($this, 'save_auto_update'));
     }
 
     /**
@@ -1738,6 +1739,16 @@ class Hozio_Image_Optimizer_Ajax_Handler {
             'latest_version' => $latest_version,
             'current_version' => HOZIO_IMAGE_OPTIMIZER_VERSION,
         ));
+    }
+
+    public function save_auto_update() {
+        check_ajax_referer('hozio_image_optimizer_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => 'Insufficient permissions'));
+        }
+        $enabled = sanitize_text_field($_POST['enabled'] ?? '0');
+        update_option('hozio_imgopt_auto_updates_enabled', $enabled);
+        wp_send_json_success();
     }
 
     public function dismiss_broken_banner() {

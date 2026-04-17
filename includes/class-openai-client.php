@@ -29,7 +29,7 @@ class Hozio_Image_Optimizer_OpenAI_Client {
      */
     public function __construct($api_key = null) {
         $this->api_key = $api_key ?: get_option('hozio_openai_api_key', '');
-        $this->model = get_option('hozio_openai_model', 'gpt-4o');
+        $this->model = get_option('hozio_openai_model', 'gpt-4.1');
     }
 
     /**
@@ -226,6 +226,9 @@ class Hozio_Image_Optimizer_OpenAI_Client {
         // GPT-4o-mini: $0.15/1M input, $0.60/1M output
         // GPT-4-turbo: $10.00/1M input, $30.00/1M output
         $model_pricing = array(
+            'gpt-4.1' => array('input' => 2.00, 'output' => 8.00),
+            'gpt-4.1-mini' => array('input' => 0.40, 'output' => 1.60),
+            'gpt-4.1-nano' => array('input' => 0.10, 'output' => 0.40),
             'gpt-4o' => array('input' => 2.50, 'output' => 10.00),
             'gpt-4o-mini' => array('input' => 0.15, 'output' => 0.60),
             'gpt-4-turbo' => array('input' => 10.00, 'output' => 30.00),

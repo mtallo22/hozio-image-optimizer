@@ -157,19 +157,29 @@ $capabilities = Hozio_Image_Optimizer::get_server_capabilities();
                                     <?php
                                     $current_model = get_option('hozio_openai_model', 'gpt-4o');
                                     $models = array(
+                                        'gpt-4.1' => array(
+                                            'name' => 'GPT-4.1',
+                                            'desc' => 'Latest model, best quality & speed',
+                                            'badge' => 'Recommended',
+                                        ),
+                                        'gpt-4.1-mini' => array(
+                                            'name' => 'GPT-4.1 Mini',
+                                            'desc' => 'Fast & affordable, great quality',
+                                            'badge' => 'Best Value',
+                                        ),
+                                        'gpt-4.1-nano' => array(
+                                            'name' => 'GPT-4.1 Nano',
+                                            'desc' => 'Ultra-fast, lowest cost',
+                                            'badge' => 'Budget',
+                                        ),
                                         'gpt-4o' => array(
                                             'name' => 'GPT-4o',
-                                            'desc' => 'Best quality, recommended',
-                                            'badge' => 'Recommended',
+                                            'desc' => 'Previous gen, excellent quality',
+                                            'badge' => '',
                                         ),
                                         'gpt-4o-mini' => array(
                                             'name' => 'GPT-4o Mini',
-                                            'desc' => 'Faster & more affordable',
-                                            'badge' => 'Budget',
-                                        ),
-                                        'gpt-4-turbo' => array(
-                                            'name' => 'GPT-4 Turbo',
-                                            'desc' => 'High quality analysis',
+                                            'desc' => 'Previous gen, affordable',
                                             'badge' => '',
                                         ),
                                     );
@@ -411,6 +421,7 @@ $capabilities = Hozio_Image_Optimizer::get_server_capabilities();
                                     <div>
                                         <span class="feature-label"><?php esc_html_e('Strip Metadata', 'hozio-image-optimizer'); ?></span>
                                         <span class="feature-desc"><?php esc_html_e('Remove EXIF data (saves ~10-20% file size)', 'hozio-image-optimizer'); ?></span>
+                                        <span class="feature-desc" style="color:#f59e0b;margin-top:2px;"><?php esc_html_e('Warning: This will also remove GPS coordinates from images', 'hozio-image-optimizer'); ?></span>
                                     </div>
                                 </div>
                                 <div class="hozio-toggle">
@@ -581,7 +592,7 @@ $capabilities = Hozio_Image_Optimizer::get_server_capabilities();
 
             <?php elseif ($current_tab === 'naming') : ?>
                 <!-- Naming Tab -->
-                <form method="post" action="options.php" class="hozio-settings-form">
+                <form method="post" action="options.php" class="hozio-settings-form hozio-settings-form-full">
                     <?php settings_fields('hozio_naming_settings'); ?>
 
                     <div class="hozio-card">
@@ -910,7 +921,7 @@ $capabilities = Hozio_Image_Optimizer::get_server_capabilities();
 
             <?php elseif ($current_tab === 'geolocation') : ?>
                 <!-- Geolocation Tab -->
-                <form method="post" action="options.php" class="hozio-settings-form" id="geolocation-form">
+                <form method="post" action="options.php" class="hozio-settings-form hozio-settings-form-full" id="geolocation-form">
                     <?php settings_fields('hozio_geolocation_settings'); ?>
 
                     <div class="hozio-card">
@@ -1731,24 +1742,34 @@ $capabilities = Hozio_Image_Optimizer::get_server_capabilities();
                             <tbody>
                                 <tr>
                                     <td>
-                                        <strong>GPT-4o</strong>
+                                        <strong>GPT-4.1</strong>
                                         <span class="model-tag recommended"><?php esc_html_e('Recommended', 'hozio-image-optimizer'); ?></span>
                                     </td>
+                                    <td>$2.00</td>
+                                    <td>$8.00</td>
+                                </tr>
+                                <tr>
+                                    <td>
+                                        <strong>GPT-4.1 Mini</strong>
+                                        <span class="model-tag budget"><?php esc_html_e('Best Value', 'hozio-image-optimizer'); ?></span>
+                                    </td>
+                                    <td>$0.40</td>
+                                    <td>$1.60</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>GPT-4.1 Nano</strong></td>
+                                    <td>$0.10</td>
+                                    <td>$0.40</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>GPT-4o</strong></td>
                                     <td>$2.50</td>
                                     <td>$10.00</td>
                                 </tr>
                                 <tr>
-                                    <td>
-                                        <strong>GPT-4o Mini</strong>
-                                        <span class="model-tag budget"><?php esc_html_e('Budget', 'hozio-image-optimizer'); ?></span>
-                                    </td>
+                                    <td><strong>GPT-4o Mini</strong></td>
                                     <td>$0.15</td>
                                     <td>$0.60</td>
-                                </tr>
-                                <tr>
-                                    <td><strong>GPT-4 Turbo</strong></td>
-                                    <td>$10.00</td>
-                                    <td>$30.00</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -1993,25 +2014,48 @@ $capabilities = Hozio_Image_Optimizer::get_server_capabilities();
                     <div class="hz-license-card">
                         <h3 style="margin:0 0 12px;font-size:13px;font-weight:700;color:#111827;"><?php esc_html_e('License Key', 'hozio-image-optimizer'); ?></h3>
                         <?php
+                        // Re-check Hub status fresh every time (not cached)
                         $is_hub_connected = class_exists('Hozio_Hub_Client') && method_exists('Hozio_Hub_Client', 'is_connected') && Hozio_Hub_Client::is_connected();
+                        $has_local_key = !empty($license_key);
                         ?>
+
                         <?php if ($is_hub_connected && $is_licensed) : ?>
-                            <p style="font-size:11px;color:#9ca3af;margin:0 0 12px;"><?php esc_html_e('License is managed by Hozio Pro Hub.', 'hozio-image-optimizer'); ?></p>
-                            <div style="display:flex;gap:8px;align-items:center;">
-                                <input type="password" value="••••••••••••••••" class="hozio-input" style="flex:1;max-width:400px;background:#f9fafb;color:#9ca3af;" disabled readonly>
+                            <!-- Licensed via Hub - locked, can't edit -->
+                            <p style="font-size:11px;color:#9ca3af;margin:0 0 12px;"><?php esc_html_e('License is managed by Hozio Pro Hub. No action needed.', 'hozio-image-optimizer'); ?></p>
+                            <div style="display:flex;gap:8px;align-items:center;padding:10px 14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;">
+                                <span class="dashicons dashicons-lock" style="color:#16a34a;font-size:16px;width:16px;height:16px;"></span>
+                                <span style="font-size:12px;color:#16a34a;font-weight:600;"><?php esc_html_e('Licensed via Hozio Pro', 'hozio-image-optimizer'); ?></span>
                             </div>
-                            <p style="margin:8px 0 0;font-size:11px;color:#16a34a;font-weight:600;">&#10003; <?php esc_html_e('Licensed via Hozio Pro — no action needed', 'hozio-image-optimizer'); ?></p>
+
+                        <?php elseif ($has_local_key && $is_licensed) : ?>
+                            <!-- Licensed via local key - show masked, allow change -->
+                            <p style="font-size:11px;color:#9ca3af;margin:0 0 12px;"><?php esc_html_e('License key is active.', 'hozio-image-optimizer'); ?></p>
+                            <div style="display:flex;gap:8px;align-items:center;padding:10px 14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;margin-bottom:10px;">
+                                <span class="dashicons dashicons-yes-alt" style="color:#16a34a;font-size:16px;width:16px;height:16px;"></span>
+                                <span style="font-size:12px;color:#16a34a;font-weight:600;"><?php esc_html_e('License is valid and active', 'hozio-image-optimizer'); ?></span>
+                                <span style="font-size:11px;color:#9ca3af;margin-left:8px;">••••••••<?php echo esc_html(substr($license_key, -4)); ?></span>
+                            </div>
+                            <form method="post" action="options.php">
+                                <?php settings_fields('hozio_license_settings'); ?>
+                                <details style="margin-top:4px;">
+                                    <summary style="font-size:11px;color:#6b7280;cursor:pointer;user-select:none;"><?php esc_html_e('Change license key', 'hozio-image-optimizer'); ?></summary>
+                                    <div style="display:flex;gap:8px;align-items:center;margin-top:8px;">
+                                        <input type="text" name="hozio_license_key" value="" class="hozio-input" style="flex:1;max-width:400px;" placeholder="<?php esc_attr_e('Enter new license key...', 'hozio-image-optimizer'); ?>">
+                                        <?php submit_button(__('Save', 'hozio-image-optimizer'), 'hz-btn hz-btn-primary', 'submit', false); ?>
+                                    </div>
+                                </details>
+                            </form>
+
                         <?php else : ?>
-                            <p style="font-size:11px;color:#9ca3af;margin:0 0 12px;"><?php esc_html_e('Enter your Hozio license key. This is the same key used for Hozio Pro.', 'hozio-image-optimizer'); ?></p>
+                            <!-- No license - show input -->
+                            <p style="font-size:11px;color:#9ca3af;margin:0 0 12px;"><?php esc_html_e('Enter your Hozio license key to enable updates. Same key as Hozio Pro.', 'hozio-image-optimizer'); ?></p>
                             <form method="post" action="options.php">
                                 <?php settings_fields('hozio_license_settings'); ?>
                                 <div style="display:flex;gap:8px;align-items:center;">
-                                    <input type="password" name="hozio_license_key" value="<?php echo esc_attr($license_key); ?>" class="hozio-input" style="flex:1;max-width:400px;" placeholder="<?php esc_attr_e('Enter license key...', 'hozio-image-optimizer'); ?>">
+                                    <input type="text" name="hozio_license_key" value="<?php echo esc_attr($license_key); ?>" class="hozio-input" style="flex:1;max-width:400px;" placeholder="<?php esc_attr_e('Enter license key...', 'hozio-image-optimizer'); ?>">
                                     <?php submit_button(__('Save Key', 'hozio-image-optimizer'), 'hz-btn hz-btn-primary', 'submit', false); ?>
                                 </div>
-                                <?php if ($is_licensed) : ?>
-                                    <p style="margin:8px 0 0;font-size:11px;color:#16a34a;font-weight:600;">&#10003; <?php esc_html_e('License is valid and active', 'hozio-image-optimizer'); ?></p>
-                                <?php elseif (!empty($license_key)) : ?>
+                                <?php if ($has_local_key && !$is_licensed) : ?>
                                     <p style="margin:8px 0 0;font-size:11px;color:#ef4444;font-weight:600;">&#10007; <?php esc_html_e('Invalid license key', 'hozio-image-optimizer'); ?></p>
                                 <?php endif; ?>
                             </form>
@@ -2050,20 +2094,26 @@ $capabilities = Hozio_Image_Optimizer::get_server_capabilities();
                             </script>
                         </div>
 
-                        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-top:1px solid #f3f4f6;">
+                        <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-top:1px solid #f3f4f6;">
                             <div>
                                 <div style="font-size:12px;font-weight:600;color:#374151;"><?php esc_html_e('Auto-Updates', 'hozio-image-optimizer'); ?></div>
                                 <div style="font-size:11px;color:#9ca3af;"><?php esc_html_e('Automatically install new versions when available', 'hozio-image-optimizer'); ?></div>
                             </div>
-                            <form method="post" action="options.php" style="margin:0;">
-                                <?php settings_fields('hozio_license_settings'); ?>
-                                <label class="hozio-toggle">
-                                    <input type="hidden" name="hozio_imgopt_auto_updates_enabled" value="0">
-                                    <input type="checkbox" name="hozio_imgopt_auto_updates_enabled" value="1" <?php checked($auto_updates, '1'); ?> onchange="this.form.submit();">
-                                    <span class="toggle-slider"></span>
-                                </label>
-                            </form>
+                            <label class="hozio-toggle">
+                                <input type="checkbox" id="hozio-auto-update-toggle" value="1" <?php checked($auto_updates, '1'); ?>>
+                                <span class="toggle-slider"></span>
+                            </label>
                         </div>
+                        <script>
+                        jQuery('#hozio-auto-update-toggle').on('change', function() {
+                            var enabled = jQuery(this).is(':checked') ? '1' : '0';
+                            jQuery.post(ajaxurl, {
+                                action: 'hozio_save_auto_update',
+                                nonce: '<?php echo esc_js(wp_create_nonce('hozio_image_optimizer_nonce')); ?>',
+                                enabled: enabled
+                            });
+                        });
+                        </script>
                     </div>
                 </div>
 
@@ -2093,17 +2143,17 @@ jQuery(function($) {
     $('#test-api-btn').on('click', function() {
         var btn = $(this);
         var result = $('#api-test-result');
-        var apiKeyInput = $('#hozio_openai_api_key').val();
+        var $input = $('#hozio_openai_api_key');
+        var apiKeyInput = $input.length ? $input.val() : '';
 
-        // If input is empty and we have a preserved key flag, test with empty (server will use existing)
         btn.prop('disabled', true).find('.dashicons').addClass('spin');
         result.removeClass('success error').text('<?php echo esc_js(__('Testing...', 'hozio-image-optimizer')); ?>');
 
         $.post(ajaxurl, {
             action: 'hozio_test_api',
             nonce: hozioImageOptimizer.nonce,
-            api_key: apiKeyInput,
-            use_existing: apiKeyInput === '' ? '1' : '0'
+            api_key: apiKeyInput || '',
+            use_existing: (!apiKeyInput || apiKeyInput === '') ? '1' : '0'
         }, function(response) {
             btn.prop('disabled', false).find('.dashicons').removeClass('spin');
 

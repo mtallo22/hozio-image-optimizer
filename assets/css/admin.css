@@ -3833,21 +3833,56 @@
 }
 
 /* --- Input Addons (px, days, etc.) --- */
-.hz-settings-content .hozio-input-addon {
-    display: inline-flex;
-    align-items: center;
-    background: #f9fafb;
+.hz-settings-content div.hozio-input-addon {
+    display: inline-flex !important;
+    align-items: stretch !important;
+    max-width: 180px;
     border: 1px solid #e5e7eb;
-    border-left: none;
-    border-radius: 0 6px 6px 0;
-    padding: 0 10px;
-    font-size: 11px;
-    color: #9ca3af;
-    font-weight: 600;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #fff;
 }
 
-.hz-settings-content .hozio-input-group .hozio-input {
-    border-radius: 6px 0 0 6px;
+.hz-settings-content div.hozio-input-addon .hozio-input {
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    flex: 1;
+    min-width: 0;
+    padding: 8px 12px;
+    font-size: 13px;
+    outline: none;
+}
+
+.hz-settings-content div.hozio-input-addon .hozio-input:focus {
+    box-shadow: none !important;
+}
+
+.hz-settings-content div.hozio-input-addon .addon {
+    display: flex;
+    align-items: center;
+    background: #f3f4f6;
+    padding: 0 12px;
+    font-size: 11px;
+    color: #6b7280;
+    font-weight: 600;
+    border-left: 1px solid #e5e7eb;
+    white-space: nowrap;
+}
+
+.hz-settings-content div.hozio-input-addon:focus-within {
+    border-color: #6366f1;
+    box-shadow: 0 0 0 2px rgba(99,102,241,0.1);
+}
+
+/* Field row - side by side */
+.hz-settings-content .hozio-field-row {
+    display: flex;
+    gap: 16px;
+}
+
+.hz-settings-content .hozio-field-row .hozio-field-group.half {
+    flex: 1;
 }
 
 /* --- Custom Location Rows --- */
@@ -4131,6 +4166,11 @@
 /* Form actions span full width */
 .hz-settings-content .hozio-form-actions {
     grid-column: 1 / -1;
+}
+
+/* Full-width form variant (for naming, geolocation tabs with wide content) */
+.hz-settings-content .hozio-settings-form-full {
+    grid-template-columns: 1fr !important;
 }
 
 /* Cards that should span full width */
