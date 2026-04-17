@@ -3448,39 +3448,485 @@
 }
 
 /* Settings Layout */
-/* Server capabilities grid in settings */
-.hz-settings-content .hozio-capabilities-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+/* ================================================================
+   SETTINGS COMPONENT STYLES - Professional Modern Design
+   All scoped under .hz-settings-content
+   ================================================================ */
+
+/* --- Model Selection Cards --- */
+.hz-settings-content .hozio-model-select {
+    display: flex;
+    flex-direction: column;
     gap: 8px;
 }
 
-/* Info boxes in settings */
+.hz-settings-content .hozio-model-option {
+    display: flex;
+    align-items: center;
+    padding: 12px 16px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.12s;
+    background: #fff;
+}
+
+.hz-settings-content .hozio-model-option:hover {
+    border-color: #c7d2fe;
+    background: #fafafe;
+}
+
+.hz-settings-content .hozio-model-option.selected {
+    border-color: #6366f1;
+    border-left: 3px solid #6366f1;
+    background: #f5f3ff;
+}
+
+.hz-settings-content .model-name {
+    font-size: 13px;
+    font-weight: 700;
+    color: #111827;
+}
+
+.hz-settings-content .model-desc {
+    font-size: 11px;
+    color: #9ca3af;
+}
+
+.hz-settings-content .model-badge {
+    font-size: 9px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 10px;
+    text-transform: uppercase;
+}
+
+/* --- Range Sliders --- */
+.hz-settings-content .hozio-range {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 6px;
+    background: #e5e7eb;
+    border-radius: 3px;
+    outline: none;
+}
+
+.hz-settings-content .hozio-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #6366f1;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(99,102,241,0.3);
+    border: 2px solid #fff;
+}
+
+.hz-settings-content .hozio-range::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #6366f1;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(99,102,241,0.3);
+    border: 2px solid #fff;
+}
+
+.hz-settings-content .range-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    color: #9ca3af;
+    margin-top: 4px;
+}
+
+.hz-settings-content .range-value {
+    display: inline-block;
+    background: #6366f1;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 10px;
+    border-radius: 10px;
+    min-width: 40px;
+    text-align: center;
+}
+
+/* --- Feature Toggles --- */
+.hz-settings-content .hozio-features-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+}
+
+.hz-settings-content .hozio-feature-toggle {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    border: 1px solid #f3f4f6;
+    border-radius: 8px;
+    background: #fafbfc;
+    transition: all 0.12s;
+}
+
+.hz-settings-content .hozio-feature-toggle:hover {
+    border-color: #e5e7eb;
+    background: #fff;
+}
+
+.hz-settings-content .hozio-feature-toggle .feature-icon {
+    width: 28px;
+    height: 28px;
+    background: #f0f0f5;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.hz-settings-content .hozio-feature-toggle .feature-icon .dashicons {
+    font-size: 14px;
+    width: 14px;
+    height: 14px;
+    color: #6366f1;
+}
+
+.hz-settings-content .hozio-feature-toggle .feature-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: #111827;
+}
+
+.hz-settings-content .hozio-feature-toggle .feature-desc {
+    font-size: 10px;
+    color: #9ca3af;
+}
+
+/* --- Format Option Cards --- */
+.hz-settings-content .hozio-format-options {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+}
+
+.hz-settings-content .hozio-format-option {
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 16px;
+    background: #fff;
+    transition: all 0.12s;
+}
+
+.hz-settings-content .hozio-format-option:hover {
+    border-color: #c7d2fe;
+}
+
+.hz-settings-content .format-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+
+/* --- Template Option Cards --- */
+.hz-settings-content .template-options-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+}
+
+.hz-settings-content .template-option,
+.hz-settings-content .template-option-custom {
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 10px 12px;
+    cursor: pointer;
+    transition: all 0.12s;
+    background: #fff;
+    font-size: 11px;
+}
+
+.hz-settings-content .template-option:hover,
+.hz-settings-content .template-option-custom:hover {
+    border-color: #c7d2fe;
+    background: #fafafe;
+}
+
+.hz-settings-content .template-option.selected {
+    border-color: #6366f1;
+    background: #f5f3ff;
+}
+
+.hz-settings-content .title-option {
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 10px 12px;
+    cursor: pointer;
+    transition: all 0.12s;
+    background: #fff;
+    font-size: 11px;
+    text-align: center;
+}
+
+.hz-settings-content .title-option:hover {
+    border-color: #c7d2fe;
+}
+
+.hz-settings-content .title-option.selected {
+    border-color: #6366f1;
+    background: #f5f3ff;
+}
+
+/* --- Server Capabilities --- */
+.hz-settings-content .hozio-capabilities-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 6px;
+}
+
+.hz-settings-content .capability-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    background: #fafbfc;
+    border: 1px solid #f3f4f6;
+    font-size: 12px;
+}
+
+.hz-settings-content .capability-item .dashicons {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+}
+
+/* --- Info Boxes --- */
 .hz-settings-content .hozio-info-box {
     border-radius: 8px;
     padding: 12px 16px;
     font-size: 12px;
+    line-height: 1.5;
+    border: 1px solid;
 }
 
-/* Button styling in settings */
+/* --- Tables --- */
+.hz-settings-content .hozio-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+
+.hz-settings-content .hozio-table th {
+    padding: 8px 12px;
+    text-align: left;
+    font-weight: 600;
+    color: #6b7280;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    border-bottom: 2px solid #f3f4f6;
+    background: #fafbfc;
+}
+
+.hz-settings-content .hozio-table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid #f3f4f6;
+    color: #374151;
+}
+
+.hz-settings-content .hozio-table tr:hover td {
+    background: #fafbfc;
+}
+
+/* --- Usage Stats Cards --- */
+.hz-settings-content .hozio-usage-cards {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.hz-settings-content .hozio-usage-card {
+    background: #fafbfc;
+    border: 1px solid #f3f4f6;
+    border-radius: 10px;
+    padding: 16px;
+    text-align: center;
+}
+
+.hz-settings-content .hozio-usage-card.highlight {
+    background: #f5f3ff;
+    border-color: #e0e7ff;
+}
+
+.hz-settings-content .usage-value {
+    font-size: 22px;
+    font-weight: 800;
+    color: #111827;
+    line-height: 1.2;
+}
+
+.hz-settings-content .usage-label {
+    font-size: 11px;
+    color: #9ca3af;
+    margin-top: 2px;
+}
+
+/* --- Token Stats --- */
+.hz-settings-content .hozio-token-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+}
+
+.hz-settings-content .token-stat {
+    padding: 12px;
+    background: #fafbfc;
+    border-radius: 8px;
+    border: 1px solid #f3f4f6;
+    text-align: center;
+}
+
+/* --- Buttons --- */
 .hz-settings-content .hozio-btn {
     font-size: 12px;
     padding: 8px 16px;
     border-radius: 6px;
+    font-weight: 600;
+    transition: all 0.12s;
 }
 
-/* Table styling in settings */
-.hz-settings-content .hozio-table {
-    width: 100%;
-    border-collapse: collapse;
+.hz-settings-content .hozio-btn-primary {
+    background: #4f46e5;
+    color: #fff;
+    border: none;
 }
 
-.hz-settings-content .hozio-table th,
-.hz-settings-content .hozio-table td {
-    padding: 8px 12px;
-    font-size: 12px;
-    text-align: left;
+.hz-settings-content .hozio-btn-primary:hover {
+    background: #4338ca;
+}
+
+.hz-settings-content .hozio-btn-secondary {
+    background: #f3f4f6;
+    color: #374151;
+    border: 1px solid #e5e7eb;
+}
+
+.hz-settings-content .hozio-btn-secondary:hover {
+    background: #e5e7eb;
+}
+
+.hz-settings-content .hozio-btn-outline {
+    background: #fff;
+    color: #374151;
+    border: 1px solid #e5e7eb;
+}
+
+.hz-settings-content .hozio-btn-outline:hover {
+    border-color: #d1d5db;
+    background: #f9fafb;
+}
+
+/* --- Input Addons (px, days, etc.) --- */
+.hz-settings-content .hozio-input-addon {
+    display: inline-flex;
+    align-items: center;
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-left: none;
+    border-radius: 0 6px 6px 0;
+    padding: 0 10px;
+    font-size: 11px;
+    color: #9ca3af;
+    font-weight: 600;
+}
+
+.hz-settings-content .hozio-input-group .hozio-input {
+    border-radius: 6px 0 0 6px;
+}
+
+/* --- Custom Location Rows --- */
+.hz-settings-content .custom-location-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding: 8px 0;
     border-bottom: 1px solid #f3f4f6;
+    flex-wrap: wrap;
+}
+
+.hz-settings-content .location-fields {
+    display: flex;
+    gap: 8px;
+    flex: 1;
+    flex-wrap: wrap;
+}
+
+.hz-settings-content .location-fields input {
+    flex: 1;
+    min-width: 100px;
+}
+
+/* --- Textareas for prompts --- */
+.hz-settings-content textarea.hozio-input {
+    min-height: 70px;
+    resize: vertical;
+    font-family: ui-monospace, 'SF Mono', Monaco, Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+/* --- Template Tokens --- */
+.hz-settings-content .template-tokens code {
+    background: #f3f4f6;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    color: #6366f1;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.12s;
+    display: inline-block;
+    margin: 2px;
+}
+
+.hz-settings-content .template-tokens code:hover {
+    background: #e0e7ff;
+}
+
+/* --- API Key Status --- */
+.hz-settings-content .hozio-api-key-status {
+    border-radius: 8px;
+    padding: 10px 16px;
+}
+
+/* --- Checklist items (auto-optimize tab) --- */
+.hz-settings-content .auto-optimize-checklist {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+/* --- Responsive --- */
+@media (max-width: 900px) {
+    .hz-settings-content .hozio-features-grid,
+    .hz-settings-content .hozio-format-options,
+    .hz-settings-content .template-options-grid,
+    .hz-settings-content .hozio-usage-cards,
+    .hz-settings-content .hozio-token-stats {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 1100px) {
+    .hz-settings-content .template-options-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
 }
 
 /* License & Updates tab */
@@ -3549,9 +3995,10 @@
     background: #fff;
     border: 1px solid #e5e7eb;
     border-radius: 10px;
-    margin-bottom: 16px;
+    margin-bottom: 0;
     box-shadow: none;
     overflow: hidden;
+    align-self: start;
 }
 
 .hz-settings-content .hozio-card-header {
@@ -3653,18 +4100,53 @@
     box-shadow: 0 0 0 2px rgba(99,102,241,0.1);
 }
 
-/* Settings form actions */
+/* Settings form actions - spans full width below cards */
 .hz-settings-content .hozio-form-actions {
-    padding: 12px 20px;
-    background: #fafbfc;
-    border-top: 1px solid #f3f4f6;
-    border-radius: 0 0 10px 10px;
+    grid-column: 1 / -1;
+    padding: 16px 0 0;
+    background: transparent;
+    border-top: none;
+    border-radius: 0;
 }
 
-/* Settings page wrapper - full width */
+.hz-settings-content .hozio-form-actions input[type="submit"] {
+    padding: 8px 20px;
+    font-size: 13px;
+}
+
+/* Settings page wrapper */
 .hz-settings-content {
     max-width: 100%;
     overflow-x: hidden;
+}
+
+/* Settings forms use 2-column grid for cards side by side */
+.hz-settings-content .hozio-settings-form {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+    align-items: start;
+}
+
+/* Form actions span full width */
+.hz-settings-content .hozio-form-actions {
+    grid-column: 1 / -1;
+}
+
+/* Cards that should span full width */
+.hz-settings-content .hozio-card.full-width {
+    grid-column: 1 / -1;
+}
+
+/* Single-card tabs (like license) don't need grid */
+.hz-settings-content .hz-license-section {
+    grid-column: 1 / -1;
+}
+
+@media (max-width: 1100px) {
+    .hz-settings-content .hozio-settings-form {
+        grid-template-columns: 1fr;
+    }
 }
 
 .hz-settings-content .hozio-settings-main {
@@ -3672,9 +4154,7 @@
     box-shadow: none !important;
     border: none !important;
     padding: 0 !important;
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
+    display: block;
 }
 
 /* Hide old settings elements */
@@ -3694,6 +4174,12 @@
 /* Prevent settings page horizontal scroll */
 .wrap.hozio-settings-page {
     overflow-x: hidden;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+.wrap.hozio-settings-page * {
+    box-sizing: border-box;
 }
 
 /* Settings form fields should not overflow */
@@ -3873,17 +4359,7 @@
 
 /* Main Settings Content */
 .hozio-settings-main {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-}
-
-/* Override old settings layout when inside new wrapper */
-.hz-settings-content .hozio-settings-main {
-    background: transparent !important;
-    box-shadow: none !important;
-    border: none !important;
-    padding: 0 !important;
+    display: block;
 }
 
 /* Settings Form */

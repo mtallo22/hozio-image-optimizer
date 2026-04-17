@@ -71,6 +71,7 @@ class Hozio_Image_Optimizer_Ajax_Handler {
         add_action('wp_ajax_hozio_scan_broken_images', array($this, 'scan_broken_images'));
         add_action('wp_ajax_hozio_resolve_broken_image', array($this, 'resolve_broken_image'));
         add_action('wp_ajax_hozio_dismiss_broken_banner', array($this, 'dismiss_broken_banner'));
+        add_action('wp_ajax_hozio_force_update_check', array($this, 'force_update_check'));
     }
 
     /**
@@ -1715,6 +1716,30 @@ class Hozio_Image_Optimizer_Ajax_Handler {
     /**
      * Dismiss the broken images banner for the current user
      */
+    public function force_update_check() {
+        check_ajax_referer('hozio_image_optimizer_nonce', 'nonce');
+        if (!current_user_can('update_plugins')) {
+            wp_send_json_error(array('message' => 'Insufficient permissions'));
+        }
+
+        global $hozio_imgopt_updater;
+        if ($hozio_imgopt_updater) {
+            $hozio_imgopt_updater->force_update_check();
+        }
+
+        // Check if update is available
+        $update_plugins = get_site_transient('update_plugins');
+        $plugin_file = basename(HOZIO_IMAGE_OPTIMIZER_DIR) . '/hozio-image-optimizer.php';
+        $update_available = isset($update_plugins->response[$plugin_file]);
+        $latest_version = $update_available ? $update_plugins->response[$plugin_file]->new_version : HOZIO_IMAGE_OPTIMIZER_VERSION;
+
+        wp_send_json_success(array(
+            'update_available' => $update_available,
+            'latest_version' => $latest_version,
+            'current_version' => HOZIO_IMAGE_OPTIMIZER_VERSION,
+        ));
+    }
+
     public function dismiss_broken_banner() {
         check_ajax_referer('hozio_image_optimizer_nonce', 'nonce');
         if (!current_user_can('upload_files')) {

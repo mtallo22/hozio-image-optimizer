@@ -1992,19 +1992,30 @@ $capabilities = Hozio_Image_Optimizer::get_server_capabilities();
                     <!-- License Key -->
                     <div class="hz-license-card">
                         <h3 style="margin:0 0 12px;font-size:13px;font-weight:700;color:#111827;"><?php esc_html_e('License Key', 'hozio-image-optimizer'); ?></h3>
-                        <p style="font-size:11px;color:#9ca3af;margin:0 0 12px;"><?php esc_html_e('Enter your Hozio license key. This is the same key used for Hozio Pro.', 'hozio-image-optimizer'); ?></p>
-                        <form method="post" action="options.php">
-                            <?php settings_fields('hozio_license_settings'); ?>
+                        <?php
+                        $is_hub_connected = class_exists('Hozio_Hub_Client') && method_exists('Hozio_Hub_Client', 'is_connected') && Hozio_Hub_Client::is_connected();
+                        ?>
+                        <?php if ($is_hub_connected && $is_licensed) : ?>
+                            <p style="font-size:11px;color:#9ca3af;margin:0 0 12px;"><?php esc_html_e('License is managed by Hozio Pro Hub.', 'hozio-image-optimizer'); ?></p>
                             <div style="display:flex;gap:8px;align-items:center;">
-                                <input type="password" name="hozio_license_key" value="<?php echo esc_attr($license_key); ?>" class="hozio-input" style="flex:1;max-width:400px;" placeholder="<?php esc_attr_e('Enter license key...', 'hozio-image-optimizer'); ?>">
-                                <?php submit_button(__('Save Key', 'hozio-image-optimizer'), 'hz-btn hz-btn-primary', 'submit', false); ?>
+                                <input type="password" value="••••••••••••••••" class="hozio-input" style="flex:1;max-width:400px;background:#f9fafb;color:#9ca3af;" disabled readonly>
                             </div>
-                            <?php if ($is_licensed) : ?>
-                                <p style="margin:8px 0 0;font-size:11px;color:#16a34a;font-weight:600;">&#10003; <?php esc_html_e('License is valid and active', 'hozio-image-optimizer'); ?></p>
-                            <?php elseif (!empty($license_key)) : ?>
-                                <p style="margin:8px 0 0;font-size:11px;color:#ef4444;font-weight:600;">&#10007; <?php esc_html_e('Invalid license key', 'hozio-image-optimizer'); ?></p>
-                            <?php endif; ?>
-                        </form>
+                            <p style="margin:8px 0 0;font-size:11px;color:#16a34a;font-weight:600;">&#10003; <?php esc_html_e('Licensed via Hozio Pro — no action needed', 'hozio-image-optimizer'); ?></p>
+                        <?php else : ?>
+                            <p style="font-size:11px;color:#9ca3af;margin:0 0 12px;"><?php esc_html_e('Enter your Hozio license key. This is the same key used for Hozio Pro.', 'hozio-image-optimizer'); ?></p>
+                            <form method="post" action="options.php">
+                                <?php settings_fields('hozio_license_settings'); ?>
+                                <div style="display:flex;gap:8px;align-items:center;">
+                                    <input type="password" name="hozio_license_key" value="<?php echo esc_attr($license_key); ?>" class="hozio-input" style="flex:1;max-width:400px;" placeholder="<?php esc_attr_e('Enter license key...', 'hozio-image-optimizer'); ?>">
+                                    <?php submit_button(__('Save Key', 'hozio-image-optimizer'), 'hz-btn hz-btn-primary', 'submit', false); ?>
+                                </div>
+                                <?php if ($is_licensed) : ?>
+                                    <p style="margin:8px 0 0;font-size:11px;color:#16a34a;font-weight:600;">&#10003; <?php esc_html_e('License is valid and active', 'hozio-image-optimizer'); ?></p>
+                                <?php elseif (!empty($license_key)) : ?>
+                                    <p style="margin:8px 0 0;font-size:11px;color:#ef4444;font-weight:600;">&#10007; <?php esc_html_e('Invalid license key', 'hozio-image-optimizer'); ?></p>
+                                <?php endif; ?>
+                            </form>
+                        <?php endif; ?>
                     </div>
 
                     <!-- Updates -->
@@ -2014,9 +2025,29 @@ $capabilities = Hozio_Image_Optimizer::get_server_capabilities();
                             <div>
                                 <div style="font-size:12px;color:#374151;"><?php esc_html_e('Last checked:', 'hozio-image-optimizer'); ?> <strong><?php echo esc_html($last_check); ?></strong></div>
                             </div>
-                            <a href="<?php echo esc_url(wp_nonce_url(admin_url('plugins.php?hozio_imgopt_check_update=1'), 'hozio_check_update')); ?>" class="hz-btn hz-btn-ghost" style="font-size:11px;">
+                            <button type="button" id="hozio-check-update-btn" class="hz-btn hz-btn-ghost" style="font-size:11px;">
                                 <span class="dashicons dashicons-update" style="font-size:14px;width:14px;height:14px;"></span> <?php esc_html_e('Check Now', 'hozio-image-optimizer'); ?>
-                            </a>
+                            </button>
+                            <script>
+                            jQuery('#hozio-check-update-btn').on('click', function() {
+                                var btn = jQuery(this);
+                                btn.prop('disabled', true).find('.dashicons').addClass('spin');
+                                jQuery.post(ajaxurl, {
+                                    action: 'hozio_force_update_check',
+                                    nonce: '<?php echo esc_js(wp_create_nonce('hozio_image_optimizer_nonce')); ?>'
+                                }, function(response) {
+                                    btn.prop('disabled', false).find('.dashicons').removeClass('spin');
+                                    if (response.success) {
+                                        btn.closest('div').find('strong').text('Just now');
+                                        if (response.data.update_available) {
+                                            alert('Update available! Version ' + response.data.latest_version + ' is ready. Go to Plugins page to update.');
+                                        } else {
+                                            alert('You are running the latest version (v<?php echo esc_js(HOZIO_IMAGE_OPTIMIZER_VERSION); ?>).');
+                                        }
+                                    }
+                                });
+                            });
+                            </script>
                         </div>
 
                         <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-top:1px solid #f3f4f6;">
