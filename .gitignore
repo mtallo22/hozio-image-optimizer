@@ -1,0 +1,33 @@
+# IDE / Editor
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Claude Code
+.claude/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Node (if ever added)
+node_modules/
+package-lock.json
+
+# Build artifacts
+*.zip
+build/
+
+# Logs
+*.log
+debug.log
+
+# Temp files
+*.tmp
+*.bak
+*.swp
+
+# These are kept in git but excluded from the ZIP by build-zip.ps1:
+# UPDATER-SETUP.md, RELEASE.md, build-zip.ps1
