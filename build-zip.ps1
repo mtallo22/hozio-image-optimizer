@@ -8,9 +8,12 @@
 Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 
-$pluginSlug = "hozio-image-optimizer"
-$srcDir     = Split-Path -Parent $MyInvocation.MyCommand.Path
-$zipPath    = Join-Path $srcDir "$pluginSlug.zip"
+$pluginSlug  = "hozio-image-optimizer"
+$srcDir      = Split-Path -Parent $MyInvocation.MyCommand.Path
+$releasesDir = Join-Path $srcDir "releases"
+if (-not (Test-Path $releasesDir)) { New-Item -ItemType Directory -Path $releasesDir | Out-Null }
+# Legacy root zip kept for the GitHub updater; versioned copy goes in releases/
+$zipPath     = Join-Path $srcDir "$pluginSlug.zip"
 
 # Files/folders to EXCLUDE from the ZIP
 $excludeNames = @(
@@ -89,6 +92,10 @@ Get-ChildItem $srcDir -Recurse -File -Force | ForEach-Object {
 
 $zip.Dispose()
 
+# Copy versioned zip to releases/
+$versionedZip = Join-Path $releasesDir "$pluginSlug-v$version.zip"
+Copy-Item $zipPath $versionedZip -Force
+
 # Verify
 if (Test-Path $zipPath) {
     $size = [math]::Round((Get-Item $zipPath).Length / 1MB, 2)
@@ -96,6 +103,7 @@ if (Test-Path $zipPath) {
     Write-Host "========================================" -ForegroundColor Green
     Write-Host "  SUCCESS" -ForegroundColor Green
     Write-Host "  File:    $pluginSlug.zip ($size MB)" -ForegroundColor Green
+    Write-Host "  Versioned: releases/$pluginSlug-v$version.zip" -ForegroundColor Green
     Write-Host "  Version: $version" -ForegroundColor Green
     Write-Host "  Files:   $fileCount" -ForegroundColor Green
     Write-Host "========================================" -ForegroundColor Green
