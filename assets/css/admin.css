@@ -7203,12 +7203,12 @@
 .hozio-settings-page.hz-v2 {
     margin: 12px 20px 0 2px;
     max-width: none;
-    padding-bottom: 80px;
+    padding-bottom: 200px;
 }
 
 /* Keep WP footer below the settings page content */
 body.toplevel_page_hozio-image-optimizer #wpfooter {
-    position: relative !important;
+    position: static !important;
     margin-top: 40px;
 }
 

@@ -486,17 +486,9 @@
                 self.saveContext();
             });
 
-            // Select all checkbox - selects ALL images, not just loaded ones
-            $('#select-all').on('change', function() {
-                var checked = $(this).is(':checked');
-                if (checked) {
-                    // Fetch all image IDs from server
-                    self.selectAllImages();
-                } else {
-                    self.selectedImages = [];
-                    $('.hozio-image-card .card-checkbox').prop('checked', false);
-                    self.updateSelectionUI();
-                }
+            // Select All button - selects ALL images, not just loaded ones
+            $('#select-all-btn').on('click', function() {
+                self.selectAllImages();
             });
 
             // Individual image selection (checkbox change - no shift handling here)
@@ -957,14 +949,10 @@
                 $('#selected-count').text(this.selectedImages.length);
                 $selInfo.show();
                 $('#deselect-all-btn').show();
-                $('#select-all-text').text('Deselect All');
-                $('#select-all').prop('checked', true);
             } else {
                 $badge.hide();
                 $selInfo.hide();
                 $('#deselect-all-btn').hide();
-                $('#select-all-text').text('Select All');
-                $('#select-all').prop('checked', false);
             }
 
             // Update the "Optimize More" button text in queue panel (if visible)
@@ -974,10 +962,6 @@
             } else if (!hasSelection) {
                 $moreBtn.hide();
             }
-
-            var allSelected = this.allImages.length > 0 &&
-                            this.selectedImages.length === this.allImages.length;
-            $('#select-all').prop('checked', allSelected);
 
             // Calculate estimated savings
             this.calculateEstimatedSavings();
@@ -1507,12 +1491,10 @@
         // Select ALL images (not just loaded ones)
         selectAllImages: function() {
             var self = this;
-            var $selectAll = $('#select-all');
+            var $btn = $('#select-all-btn');
 
             // Show loading state
-            $selectAll.prop('disabled', true);
-            var originalLabel = $('.select-all-label').text();
-            $('.select-all-label').text('Loading...');
+            $btn.prop('disabled', true).text('Loading...');
 
             $.post(hozioImageOptimizerData.ajaxUrl, {
                 action: 'hozio_get_all_image_ids',
@@ -1521,8 +1503,7 @@
                 filter: $('#filter-type').val(),
                 status_filter: $('#filter-status').val()
             }, function(response) {
-                $selectAll.prop('disabled', false);
-                $('.select-all-label').text(originalLabel);
+                $btn.prop('disabled', false).text('Select All');
 
                 if (response.success && response.data.ids) {
                     self.selectedImages = response.data.ids.map(function(id) {
@@ -1537,13 +1518,11 @@
 
                     // Show count if more than visible
                     if (self.selectedImages.length > self.allImages.length) {
-                        var hiddenCount = self.selectedImages.length - self.allImages.length;
                         $('#selected-count-badge').text(self.selectedImages.length);
                     }
                 }
             }).fail(function() {
-                $selectAll.prop('disabled', false).prop('checked', false);
-                $('.select-all-label').text(originalLabel);
+                $btn.prop('disabled', false).text('Select All');
                 alert('Failed to select all images. Please try again.');
             });
         },
@@ -1614,7 +1593,6 @@
                 $(this).find('.card-checkbox').prop('checked', false);
             });
 
-            $('#select-all').prop('checked', false);
             this.updateSelectionUI();
         },
 

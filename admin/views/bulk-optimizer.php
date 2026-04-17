@@ -353,13 +353,10 @@ $settings_url = admin_url('options-general.php?page=hozio-image-optimizer-settin
 
             <!-- Row 2: Selection Actions -->
             <div class="hz-selection-bar">
-                <label class="hz-check-label" id="select-all-label">
-                    <input type="checkbox" id="select-all">
-                    <span id="select-all-text"><?php esc_html_e('Select All', 'hozio-image-optimizer'); ?></span>
-                </label>
+                <button type="button" class="hz-pill-btn" id="select-all-btn"><?php esc_html_e('Select All', 'hozio-image-optimizer'); ?></button>
+                <button type="button" class="hz-pill-btn" id="deselect-all-btn" style="display:none;"><?php esc_html_e('Deselect All', 'hozio-image-optimizer'); ?></button>
                 <button type="button" class="hz-pill-btn hz-pill-orange" id="select-unoptimized-btn"><?php esc_html_e('Unoptimized', 'hozio-image-optimizer'); ?></button>
                 <button type="button" class="hz-pill-btn hz-pill-blue" id="select-recommended-btn"><?php esc_html_e('Recommended', 'hozio-image-optimizer'); ?></button>
-                <button type="button" class="hz-pill-btn" id="deselect-all-btn" style="display:none;"><?php esc_html_e('Clear', 'hozio-image-optimizer'); ?></button>
                 <span class="hz-selection-count" id="hz-selection-info" style="display:none;">
                     <strong id="selected-count">0</strong> <?php esc_html_e('selected', 'hozio-image-optimizer'); ?>
                 </span>
