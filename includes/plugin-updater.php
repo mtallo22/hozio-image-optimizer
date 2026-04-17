@@ -236,6 +236,7 @@ class Hozio_ImgOpt_Updater {
 
         activate_plugin($this->plugin_file);
         delete_transient($this->cache_key);
+        set_transient('hozio_redirect_to_settings', 1, 60);
 
         return $response;
     }

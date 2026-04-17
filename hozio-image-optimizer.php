@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Hozio Image Optimizer
  * Description: AI-powered image optimization with smart compression, WebP/AVIF conversion, AI renaming, alt text generation, and bulk processing.
- * Version: 1.5.4
+ * Version: 1.5.5
  * Author: Hozio
  * Author URI: https://hozio.com
  * License: GPL v2 or later
@@ -20,8 +20,8 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('HOZIO_IMAGE_OPTIMIZER_VERSION', '1.5.4');
-define('HOZIO_IMG_VERSION', '1.5.4'); // For updater compatibility
+define('HOZIO_IMAGE_OPTIMIZER_VERSION', '1.5.5');
+define('HOZIO_IMG_VERSION', '1.5.5'); // For updater compatibility
 define('HOZIO_IMAGE_OPTIMIZER_FILE', __FILE__);
 define('HOZIO_IMAGE_OPTIMIZER_DIR', plugin_dir_path(__FILE__));
 define('HOZIO_IMAGE_OPTIMIZER_URL', plugin_dir_url(__FILE__));
@@ -109,6 +109,7 @@ class Hozio_Image_Optimizer {
      */
     private function init_hooks() {
         add_action('init', array($this, 'load_textdomain'));
+        add_action('admin_init', array($this, 'maybe_redirect_after_update'));
         add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_assets'));
         add_action('admin_enqueue_scripts', array($this, 'enqueue_global_banner'));
         add_action('admin_notices', array($this, 'render_global_banner'));
@@ -124,6 +125,21 @@ class Hozio_Image_Optimizer {
         if (get_option('hozio_enable_redirects', false)) {
             $redirect_manager = new Hozio_Image_Optimizer_Redirect_Manager();
             add_action('template_redirect', array($redirect_manager, 'handle_redirect'), 1);
+        }
+    }
+
+    /**
+     * Redirect to settings page after a plugin update completes.
+     * Transient is set by the updater's after_install() hook.
+     */
+    public function maybe_redirect_after_update() {
+        if ( ! current_user_can( 'manage_options' ) ) {
+            return;
+        }
+        if ( get_transient( 'hozio_redirect_to_settings' ) ) {
+            delete_transient( 'hozio_redirect_to_settings' );
+            wp_safe_redirect( admin_url( 'admin.php?page=hozio-image-optimizer' ) );
+            exit;
         }
     }
 

@@ -2252,24 +2252,6 @@ $system_stats = array(
         </div><!-- /.hz-settings-content -->
     </div><!-- /.hz-shell -->
 
-    <!-- Sticky Save Bar (appears on dirty state) -->
-    <div class="hz-save-bar" id="hz-save-bar" aria-live="polite" hidden>
-        <div class="hz-save-bar-inner">
-            <span class="hz-save-bar-status" id="hz-save-bar-status">
-                <?php esc_html_e('Unsaved changes', 'hozio-image-optimizer'); ?>
-            </span>
-            <div class="hz-save-bar-actions">
-                <button type="button" class="hz-btn hz-btn-ghost" id="hz-save-bar-discard">
-                    <?php esc_html_e('Discard', 'hozio-image-optimizer'); ?>
-                </button>
-                <button type="button" class="hz-btn hz-btn-primary" id="hz-save-bar-save">
-                    <?php esc_html_e('Save Changes', 'hozio-image-optimizer'); ?>
-                    <span class="hz-kbd hz-kbd-inline">&crarr;</span>
-                </button>
-            </div>
-        </div>
-    </div>
-
     <!-- Command Palette Modal -->
     <div class="hz-palette" id="hz-palette" role="dialog" aria-modal="true" aria-labelledby="hz-palette-label" hidden>
         <div class="hz-palette-backdrop" data-hz-palette-close></div>
