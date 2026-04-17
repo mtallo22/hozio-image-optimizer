@@ -42,8 +42,17 @@ class Hozio_ImgOpt_Updater {
         // Handle "Check for Updates" link click
         if (isset($_GET['hozio_imgopt_check_update']) && wp_verify_nonce($_GET['_wpnonce'] ?? '', 'hozio_check_update')) {
             $this->force_update_check();
-            wp_redirect(admin_url('plugins.php?hozio_update_checked=1'));
+            set_transient('hozio_imgopt_update_notice', 'checked', 30);
+            wp_redirect(admin_url('plugins.php'));
             exit;
+        }
+
+        // Show success notice after check
+        if (get_transient('hozio_imgopt_update_notice') === 'checked') {
+            add_action('admin_notices', function() {
+                delete_transient('hozio_imgopt_update_notice');
+                echo '<div class="notice notice-success is-dismissible"><p><strong>Hozio Image Optimizer:</strong> Update check complete. You are running v' . esc_html($this->current_version) . '.</p></div>';
+            });
         }
     }
 

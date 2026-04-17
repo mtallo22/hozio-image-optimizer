@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Hozio Image Optimizer
  * Description: AI-powered image optimization with smart compression, WebP/AVIF conversion, AI renaming, alt text generation, and bulk processing.
- * Version: 1.4.4
+ * Version: 1.4.5
  * Author: Hozio
  * Author URI: https://hozio.com
  * License: GPL v2 or later
@@ -20,8 +20,8 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('HOZIO_IMAGE_OPTIMIZER_VERSION', '1.4.4');
-define('HOZIO_IMG_VERSION', '1.4.4'); // For updater compatibility
+define('HOZIO_IMAGE_OPTIMIZER_VERSION', '1.4.5');
+define('HOZIO_IMG_VERSION', '1.4.5'); // For updater compatibility
 define('HOZIO_IMAGE_OPTIMIZER_FILE', __FILE__);
 define('HOZIO_IMAGE_OPTIMIZER_DIR', plugin_dir_path(__FILE__));
 define('HOZIO_IMAGE_OPTIMIZER_URL', plugin_dir_url(__FILE__));
