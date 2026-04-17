@@ -20,6 +20,14 @@ class Hozio_Image_Optimizer_Settings {
      * Register all settings
      */
     public function register_settings() {
+        // License Settings
+        register_setting('hozio_license_settings', 'hozio_license_key', array(
+            'sanitize_callback' => 'sanitize_text_field',
+        ));
+        register_setting('hozio_license_settings', 'hozio_imgopt_auto_updates_enabled', array(
+            'sanitize_callback' => 'sanitize_text_field',
+        ));
+
         // API Settings
         register_setting('hozio_api_settings', 'hozio_openai_api_key', array(
             'sanitize_callback' => array($this, 'sanitize_api_key'),
@@ -215,6 +223,10 @@ class Hozio_Image_Optimizer_Settings {
             'usage' => array(
                 'title' => __('API Usage', 'hozio-image-optimizer'),
                 'icon' => 'dashicons-chart-area',
+            ),
+            'license' => array(
+                'title' => __('License & Updates', 'hozio-image-optimizer'),
+                'icon' => 'dashicons-admin-network',
             ),
         );
     }

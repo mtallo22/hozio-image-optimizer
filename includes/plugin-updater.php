@@ -38,6 +38,13 @@ class Hozio_ImgOpt_Updater {
         add_filter('upgrader_post_install',                 [$this, 'after_install'], 10, 3);
         add_filter('auto_update_plugin',                    [$this, 'enable_auto_updates'], 10, 2);
         add_filter('plugin_action_links_' . $this->plugin_file, [$this, 'add_action_links']);
+
+        // Handle "Check for Updates" link click
+        if (isset($_GET['hozio_imgopt_check_update']) && wp_verify_nonce($_GET['_wpnonce'] ?? '', 'hozio_check_update')) {
+            $this->force_update_check();
+            wp_redirect(admin_url('plugins.php?hozio_update_checked=1'));
+            exit;
+        }
     }
 
     private function get_current_version() {
@@ -225,15 +232,14 @@ class Hozio_ImgOpt_Updater {
     }
 
     public function add_action_links($links) {
-        $settings_url  = admin_url('options-general.php?page=hozio-image-optimizer-settings');
-        $optimizer_url = admin_url('upload.php?page=hozio-image-optimizer');
+        $settings_url = admin_url('options-general.php?page=hozio-image-optimizer-settings&tab=license');
 
-        array_unshift($links, '<a href="' . $settings_url . '">Settings</a>');
-        array_unshift($links, '<a href="' . $optimizer_url . '">Optimize Images</a>');
-
+        // Only add updater-specific links (Optimize Images + Settings are added by class-admin.php)
         if (!$this->is_license_valid()) {
-            array_unshift($links, '<a href="' . $settings_url . '" style="color:#d63638;">Enter License Key</a>');
+            $links[] = '<a href="' . $settings_url . '" style="color:#d63638;">Enter License</a>';
         }
+
+        $links[] = '<a href="' . wp_nonce_url(admin_url('plugins.php?hozio_imgopt_check_update=1'), 'hozio_check_update') . '">Check for Updates</a>';
 
         return $links;
     }

@@ -3550,6 +3550,75 @@
     border-radius: 0 0 10px 10px;
 }
 
+/* License & Updates tab */
+.hz-license-section {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.hz-license-card {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 16px 20px;
+}
+
+.hz-license-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.hz-license-icon {
+    width: 36px;
+    height: 36px;
+    background: #1e293b;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.hz-license-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: #111827;
+}
+
+.hz-license-version {
+    font-size: 11px;
+    color: #9ca3af;
+}
+
+.hz-license-status {
+    margin-left: auto;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: 20px;
+}
+
+.hz-license-status.active {
+    background: #dcfce7;
+    color: #16a34a;
+}
+
+.hz-license-status.inactive {
+    background: #fef2f2;
+    color: #ef4444;
+}
+
+/* Settings page overrides to ensure cards display properly */
+.hz-settings-content .hozio-card {
+    display: block !important;
+}
+
+.hz-settings-content .hozio-card-header {
+    display: flex !important;
+}
+
 /* Tab nav scroll for many tabs */
 .hz-tab-nav-scroll {
     overflow-x: auto;
@@ -3598,7 +3667,15 @@
 .hozio-settings-main {
     display: flex;
     flex-direction: column;
-    gap: 24px;
+    gap: 16px;
+}
+
+/* Override old settings layout when inside new wrapper */
+.hz-settings-content .hozio-settings-main {
+    background: transparent !important;
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
 }
 
 /* Settings Form */
