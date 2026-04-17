@@ -282,20 +282,23 @@
             if (!template) {
                 return '';
             }
+            var sampleTitle = SAMPLE.keywordTitle + ' in ' + SAMPLE.locationTitle;
             var map = forTitle ? {
                 '{keyword}':    SAMPLE.keywordTitle,
                 '{location}':   SAMPLE.locationTitle,
                 '{site_title}': SITE_TITLE,
                 '{timestamp}':  SAMPLE.timestamp,
-                '{random}':     SAMPLE.random
+                '{random}':     SAMPLE.random,
+                '{title}':      sampleTitle
             } : {
                 '{keyword}':    SAMPLE.keyword,
                 '{location}':   SAMPLE.location,
                 '{site_title}': SITE_TITLE_SLUG,
                 '{timestamp}':  SAMPLE.timestamp,
-                '{random}':     SAMPLE.random
+                '{random}':     SAMPLE.random,
+                '{title}':      SAMPLE.keyword + '-' + SAMPLE.location
             };
-            return template.replace(/\{keyword\}|\{location\}|\{site_title\}|\{timestamp\}|\{random\}/g, function(m) {
+            return template.replace(/\{keyword\}|\{location\}|\{site_title\}|\{timestamp\}|\{random\}|\{title\}/g, function(m) {
                 return map[m] || '';
             });
         }

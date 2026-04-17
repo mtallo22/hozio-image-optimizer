@@ -4155,38 +4155,11 @@
     overflow-x: hidden;
 }
 
-/* Settings forms use 2-column grid for cards side by side */
-.hz-settings-content .hozio-settings-form {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 16px;
-    align-items: start;
-}
-
-/* Form actions span full width */
-.hz-settings-content .hozio-form-actions {
-    grid-column: 1 / -1;
-}
-
-/* Full-width form variant (for naming, geolocation tabs with wide content) */
+/* Settings forms: single column, full width */
+.hz-settings-content .hozio-settings-form,
 .hz-settings-content .hozio-settings-form-full {
-    grid-template-columns: 1fr !important;
-}
-
-/* Cards that should span full width */
-.hz-settings-content .hozio-card.full-width {
-    grid-column: 1 / -1;
-}
-
-/* Single-card tabs (like license) don't need grid */
-.hz-settings-content .hz-license-section {
-    grid-column: 1 / -1;
-}
-
-@media (max-width: 1100px) {
-    .hz-settings-content .hozio-settings-form {
-        grid-template-columns: 1fr;
-    }
+    display: block;
+    width: 100%;
 }
 
 .hz-settings-content .hozio-settings-main {
@@ -7317,7 +7290,7 @@
     min-width: 0;
 }
 .hozio-settings-page.hz-v2 .hozio-settings-main {
-    max-width: 960px;
+    max-width: 100%;
 }
 .hozio-settings-page.hz-v2 .hz-tab-panel {
     display: none;
