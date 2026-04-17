@@ -9,12 +9,24 @@ if (!defined('ABSPATH')) {
 
 $tabs = Hozio_Image_Optimizer_Settings::get_tabs();
 $current_tab = Hozio_Image_Optimizer_Settings::get_current_tab();
+$tab_statuses = Hozio_Image_Optimizer_Settings::get_tab_statuses();
 
 // Server capabilities for display
 $capabilities = Hozio_Image_Optimizer::get_server_capabilities();
+
+// System status strip values
+$usage_stats = get_option('hozio_api_usage_stats', array());
+$system_stats = array(
+    'api_requests' => isset($usage_stats['total_requests']) ? (int) $usage_stats['total_requests'] : 0,
+    'api_cost'     => isset($usage_stats['estimated_cost']) ? (float) $usage_stats['estimated_cost'] : 0,
+    'quality'      => (int) get_option('hozio_compression_quality', 82),
+    'max_dim'      => (int) get_option('hozio_max_width', 2048),
+    'retention'    => (int) get_option('hozio_backup_retention_days', 30),
+    'model'        => get_option('hozio_openai_model', 'gpt-4o'),
+);
 ?>
 
-<div class="wrap hozio-settings-page">
+<div class="wrap hozio-settings-page hz-v2">
 
     <!-- Top Bar -->
     <div class="hz-topbar">
@@ -26,6 +38,11 @@ $capabilities = Hozio_Image_Optimizer::get_server_capabilities();
             </div>
         </div>
         <div class="hz-topbar-right">
+            <button type="button" class="hz-palette-trigger" id="hz-palette-open" title="<?php esc_attr_e('Search settings', 'hozio-image-optimizer'); ?>">
+                <span class="dashicons dashicons-search"></span>
+                <span class="hz-palette-trigger-label"><?php esc_html_e('Search settings', 'hozio-image-optimizer'); ?></span>
+                <span class="hz-kbd"><?php echo esc_html(strpos(strtolower((string) ($_SERVER['HTTP_USER_AGENT'] ?? '')), 'mac') !== false ? '&#8984;K' : 'Ctrl K'); ?></span>
+            </button>
             <a href="<?php echo esc_url(admin_url('upload.php?page=hozio-image-optimizer')); ?>" class="hz-nav-link">
                 <span class="dashicons dashicons-images-alt2"></span> <?php esc_html_e('Optimizer', 'hozio-image-optimizer'); ?>
             </a>
@@ -35,20 +52,70 @@ $capabilities = Hozio_Image_Optimizer::get_server_capabilities();
         </div>
     </div>
 
-    <!-- Tab Navigation -->
-    <div class="hz-tab-nav hz-tab-nav-scroll">
-        <?php foreach ($tabs as $tab_id => $tab) : ?>
-            <a href="<?php echo esc_url(add_query_arg('tab', $tab_id)); ?>"
-               class="hz-tab <?php echo $current_tab === $tab_id ? 'active' : ''; ?>">
-                <?php echo esc_html($tab['title']); ?>
-            </a>
-        <?php endforeach; ?>
+    <!-- System Status Strip (Grafana-style compact metrics) -->
+    <div class="hz-status-strip" role="group" aria-label="<?php esc_attr_e('System status', 'hozio-image-optimizer'); ?>">
+        <div class="hz-stat">
+            <span class="hz-stat-label"><?php esc_html_e('API calls', 'hozio-image-optimizer'); ?></span>
+            <span class="hz-stat-value"><?php echo esc_html(number_format_i18n($system_stats['api_requests'])); ?></span>
+        </div>
+        <div class="hz-stat">
+            <span class="hz-stat-label"><?php esc_html_e('Est. cost', 'hozio-image-optimizer'); ?></span>
+            <span class="hz-stat-value">$<?php echo esc_html(number_format($system_stats['api_cost'], 2)); ?></span>
+        </div>
+        <div class="hz-stat">
+            <span class="hz-stat-label"><?php esc_html_e('Model', 'hozio-image-optimizer'); ?></span>
+            <span class="hz-stat-value hz-stat-mono"><?php echo esc_html($system_stats['model']); ?></span>
+        </div>
+        <div class="hz-stat">
+            <span class="hz-stat-label"><?php esc_html_e('Quality', 'hozio-image-optimizer'); ?></span>
+            <span class="hz-stat-value"><?php echo esc_html($system_stats['quality']); ?>%</span>
+        </div>
+        <div class="hz-stat">
+            <span class="hz-stat-label"><?php esc_html_e('Max dim', 'hozio-image-optimizer'); ?></span>
+            <span class="hz-stat-value"><?php echo esc_html($system_stats['max_dim']); ?>px</span>
+        </div>
+        <div class="hz-stat">
+            <span class="hz-stat-label"><?php esc_html_e('Backups', 'hozio-image-optimizer'); ?></span>
+            <span class="hz-stat-value"><?php echo esc_html($system_stats['retention']); ?>d</span>
+        </div>
     </div>
 
-    <!-- Settings Content (single column, no sidebar) -->
-    <div class="hz-settings-content">
-        <div class="hozio-settings-main">
-            <?php if ($current_tab === 'api') : ?>
+    <!-- Main Shell: Sidebar + Content -->
+    <div class="hz-shell">
+
+        <!-- Sidebar Navigation -->
+        <aside class="hz-sidebar" aria-label="<?php esc_attr_e('Settings navigation', 'hozio-image-optimizer'); ?>">
+            <nav class="hz-sidebar-nav">
+                <?php foreach ($tabs as $tab_id => $tab) :
+                    $status = isset($tab_statuses[$tab_id]) ? $tab_statuses[$tab_id] : array('level' => 'off', 'label' => null);
+                    $is_active = $current_tab === $tab_id;
+                    ?>
+                    <a href="<?php echo esc_url(add_query_arg('tab', $tab_id)); ?>"
+                       class="hz-sidenav-item <?php echo $is_active ? 'active' : ''; ?>"
+                       id="hz-sidenav-<?php echo esc_attr($tab_id); ?>"
+                       data-tab="<?php echo esc_attr($tab_id); ?>">
+                        <span class="dashicons <?php echo esc_attr($tab['icon']); ?>"></span>
+                        <span class="hz-sidenav-label"><?php echo esc_html($tab['title']); ?></span>
+                        <span class="hz-chip hz-chip-<?php echo esc_attr($status['level']); ?>" title="<?php echo esc_attr($status['label'] ?? ''); ?>">
+                            <?php echo esc_html(Hozio_Image_Optimizer_Settings::get_status_chip_label($status['level'])); ?>
+                        </span>
+                    </a>
+                <?php endforeach; ?>
+            </nav>
+            <div class="hz-sidebar-foot">
+                <button type="button" class="hz-palette-trigger hz-palette-trigger-mini" id="hz-palette-open-mini">
+                    <span class="dashicons dashicons-search"></span>
+                    <span><?php esc_html_e('Quick find', 'hozio-image-optimizer'); ?></span>
+                    <span class="hz-kbd"><?php echo esc_html(strpos(strtolower((string) ($_SERVER['HTTP_USER_AGENT'] ?? '')), 'mac') !== false ? '&#8984;K' : 'Ctrl K'); ?></span>
+                </button>
+            </div>
+        </aside>
+
+        <!-- Settings Content Panels -->
+        <div class="hz-settings-content">
+            <div class="hozio-settings-main">
+                <?php /* Tab: api */ ?>
+                <div class="hz-tab-panel <?php echo $current_tab === 'api' ? 'hz-active' : ''; ?>" data-tab="api" id="hz-tab-api" role="tabpanel" aria-labelledby="hz-sidenav-api">
                 <!-- AI Configuration Tab -->
                 <form method="post" action="options.php" class="hozio-settings-form">
                     <?php settings_fields('hozio_api_settings'); ?>
@@ -333,7 +400,10 @@ $capabilities = Hozio_Image_Optimizer::get_server_capabilities();
                     </div>
                 </form>
 
-            <?php elseif ($current_tab === 'compression') : ?>
+                </div><?php /* /panel api */ ?>
+
+                <?php /* Tab: compression */ ?>
+                <div class="hz-tab-panel <?php echo $current_tab === 'compression' ? 'hz-active' : ''; ?>" data-tab="compression" id="hz-tab-compression" role="tabpanel" aria-labelledby="hz-sidenav-compression">
                 <!-- Compression Tab -->
                 <form method="post" action="options.php" class="hozio-settings-form">
                     <?php settings_fields('hozio_compression_settings'); ?>
@@ -490,7 +560,10 @@ $capabilities = Hozio_Image_Optimizer::get_server_capabilities();
                     </div>
                 </form>
 
-            <?php elseif ($current_tab === 'format') : ?>
+                </div><?php /* /panel compression */ ?>
+
+                <?php /* Tab: format */ ?>
+                <div class="hz-tab-panel <?php echo $current_tab === 'format' ? 'hz-active' : ''; ?>" data-tab="format" id="hz-tab-format" role="tabpanel" aria-labelledby="hz-sidenav-format">
                 <!-- Format Conversion Tab -->
                 <form method="post" action="options.php" class="hozio-settings-form">
                     <?php settings_fields('hozio_format_settings'); ?>
@@ -590,7 +663,33 @@ $capabilities = Hozio_Image_Optimizer::get_server_capabilities();
                     </div>
                 </form>
 
-            <?php elseif ($current_tab === 'naming') : ?>
+                </div><?php /* /panel format */ ?>
+
+                <?php /* Tab: naming */ ?>
+                <div class="hz-tab-panel <?php echo $current_tab === 'naming' ? 'hz-active' : ''; ?>" data-tab="naming" id="hz-tab-naming" role="tabpanel" aria-labelledby="hz-sidenav-naming">
+
+                <!-- Live Naming Preview -->
+                <div class="hz-preview-card" id="hz-naming-preview" data-search-keywords="preview filename example template live">
+                    <div class="hz-preview-head">
+                        <span class="dashicons dashicons-visibility"></span>
+                        <span class="hz-preview-title"><?php esc_html_e('Live preview', 'hozio-image-optimizer'); ?></span>
+                        <span class="hz-chip hz-chip-ok hz-chip-sm"><?php esc_html_e('Sample image', 'hozio-image-optimizer'); ?></span>
+                    </div>
+                    <dl class="hz-preview-grid">
+                        <dt><?php esc_html_e('Template', 'hozio-image-optimizer'); ?></dt>
+                        <dd><code class="hz-preview-template" id="hz-preview-filename-template"><?php echo esc_html(get_option('hozio_naming_template', '{keyword}-{location}')); ?></code></dd>
+
+                        <dt><?php esc_html_e('Filename', 'hozio-image-optimizer'); ?></dt>
+                        <dd><code class="hz-preview-output" id="hz-preview-filename-output">&mdash;</code></dd>
+
+                        <dt><?php esc_html_e('Title template', 'hozio-image-optimizer'); ?></dt>
+                        <dd><code class="hz-preview-template" id="hz-preview-title-template"><?php echo esc_html(get_option('hozio_title_template', 'Professional {keyword} in {location}')); ?></code></dd>
+
+                        <dt><?php esc_html_e('Title', 'hozio-image-optimizer'); ?></dt>
+                        <dd class="hz-preview-title-output" id="hz-preview-title-output">&mdash;</dd>
+                    </dl>
+                </div>
+
                 <!-- Naming Tab -->
                 <form method="post" action="options.php" class="hozio-settings-form hozio-settings-form-full">
                     <?php settings_fields('hozio_naming_settings'); ?>
@@ -919,7 +1018,10 @@ $capabilities = Hozio_Image_Optimizer::get_server_capabilities();
                 });
                 </script>
 
-            <?php elseif ($current_tab === 'geolocation') : ?>
+                </div><?php /* /panel naming */ ?>
+
+                <?php /* Tab: geolocation */ ?>
+                <div class="hz-tab-panel <?php echo $current_tab === 'geolocation' ? 'hz-active' : ''; ?>" data-tab="geolocation" id="hz-tab-geolocation" role="tabpanel" aria-labelledby="hz-sidenav-geolocation">
                 <!-- Geolocation Tab -->
                 <form method="post" action="options.php" class="hozio-settings-form hozio-settings-form-full" id="geolocation-form">
                     <?php settings_fields('hozio_geolocation_settings'); ?>
@@ -1130,7 +1232,10 @@ $capabilities = Hozio_Image_Optimizer::get_server_capabilities();
                 });
                 </script>
 
-            <?php elseif ($current_tab === 'auto_optimize') : ?>
+                </div><?php /* /panel geolocation */ ?>
+
+                <?php /* Tab: auto_optimize */ ?>
+                <div class="hz-tab-panel <?php echo $current_tab === 'auto_optimize' ? 'hz-active' : ''; ?>" data-tab="auto_optimize" id="hz-tab-auto_optimize" role="tabpanel" aria-labelledby="hz-sidenav-auto_optimize">
                 <!-- Auto-Optimize Tab -->
                 <form method="post" action="options.php" class="hozio-settings-form">
                     <?php settings_fields('hozio_auto_optimize_settings'); ?>
@@ -1487,7 +1592,10 @@ $capabilities = Hozio_Image_Optimizer::get_server_capabilities();
                 });
                 </script>
 
-            <?php elseif ($current_tab === 'backup') : ?>
+                </div><?php /* /panel auto_optimize */ ?>
+
+                <?php /* Tab: backup */ ?>
+                <div class="hz-tab-panel <?php echo $current_tab === 'backup' ? 'hz-active' : ''; ?>" data-tab="backup" id="hz-tab-backup" role="tabpanel" aria-labelledby="hz-sidenav-backup">
                 <!-- Backup & Safety Tab -->
                 <form method="post" action="options.php" class="hozio-settings-form">
                     <?php settings_fields('hozio_backup_settings'); ?>
@@ -1597,7 +1705,10 @@ $capabilities = Hozio_Image_Optimizer::get_server_capabilities();
                     </div>
                 </form>
 
-            <?php elseif ($current_tab === 'usage') : ?>
+                </div><?php /* /panel backup */ ?>
+
+                <?php /* Tab: usage */ ?>
+                <div class="hz-tab-panel <?php echo $current_tab === 'usage' ? 'hz-active' : ''; ?>" data-tab="usage" id="hz-tab-usage" role="tabpanel" aria-labelledby="hz-sidenav-usage">
                 <!-- API Usage Tab -->
                 <?php
                 $usage_stats = get_option('hozio_api_usage_stats', array(
@@ -1986,7 +2097,10 @@ $capabilities = Hozio_Image_Optimizer::get_server_capabilities();
                 });
                 </script>
 
-            <?php elseif ($current_tab === 'license') : ?>
+                </div><?php /* /panel usage */ ?>
+
+                <?php /* Tab: license */ ?>
+                <div class="hz-tab-panel <?php echo $current_tab === 'license' ? 'hz-active' : ''; ?>" data-tab="license" id="hz-tab-license" role="tabpanel" aria-labelledby="hz-sidenav-license">
                 <!-- License & Updates Tab -->
                 <?php
                 $license_key = get_option('hozio_license_key', '');
@@ -2133,10 +2247,51 @@ $capabilities = Hozio_Image_Optimizer::get_server_capabilities();
                     </div>
                 </div>
 
-            <?php endif; ?>
+                </div><?php /* /panel license */ ?>
+            </div><!-- /.hozio-settings-main -->
+        </div><!-- /.hz-settings-content -->
+    </div><!-- /.hz-shell -->
+
+    <!-- Sticky Save Bar (appears on dirty state) -->
+    <div class="hz-save-bar" id="hz-save-bar" aria-live="polite" hidden>
+        <div class="hz-save-bar-inner">
+            <span class="hz-save-bar-status" id="hz-save-bar-status">
+                <?php esc_html_e('Unsaved changes', 'hozio-image-optimizer'); ?>
+            </span>
+            <div class="hz-save-bar-actions">
+                <button type="button" class="hz-btn hz-btn-ghost" id="hz-save-bar-discard">
+                    <?php esc_html_e('Discard', 'hozio-image-optimizer'); ?>
+                </button>
+                <button type="button" class="hz-btn hz-btn-primary" id="hz-save-bar-save">
+                    <?php esc_html_e('Save Changes', 'hozio-image-optimizer'); ?>
+                    <span class="hz-kbd hz-kbd-inline">&crarr;</span>
+                </button>
+            </div>
         </div>
     </div>
-</div>
+
+    <!-- Command Palette Modal -->
+    <div class="hz-palette" id="hz-palette" role="dialog" aria-modal="true" aria-labelledby="hz-palette-label" hidden>
+        <div class="hz-palette-backdrop" data-hz-palette-close></div>
+        <div class="hz-palette-panel" role="document">
+            <div class="hz-palette-search">
+                <span class="dashicons dashicons-search"></span>
+                <input type="text" id="hz-palette-input" autocomplete="off" spellcheck="false"
+                       placeholder="<?php esc_attr_e('Search settings, fields, sections…', 'hozio-image-optimizer'); ?>"
+                       aria-label="<?php esc_attr_e('Search settings', 'hozio-image-optimizer'); ?>">
+                <button type="button" class="hz-palette-close" data-hz-palette-close aria-label="<?php esc_attr_e('Close search', 'hozio-image-optimizer'); ?>">
+                    <span class="hz-kbd">Esc</span>
+                </button>
+            </div>
+            <div class="hz-palette-results" id="hz-palette-results" role="listbox" aria-label="<?php esc_attr_e('Search results', 'hozio-image-optimizer'); ?>"></div>
+            <div class="hz-palette-hint">
+                <span><span class="hz-kbd">&uarr;</span><span class="hz-kbd">&darr;</span> <?php esc_html_e('Navigate', 'hozio-image-optimizer'); ?></span>
+                <span><span class="hz-kbd">&crarr;</span> <?php esc_html_e('Open', 'hozio-image-optimizer'); ?></span>
+                <span><span class="hz-kbd">Esc</span> <?php esc_html_e('Close', 'hozio-image-optimizer'); ?></span>
+            </div>
+        </div>
+    </div>
+</div><!-- /.wrap -->
 
 <script>
 jQuery(function($) {

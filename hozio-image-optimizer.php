@@ -286,10 +286,14 @@ class Hozio_Image_Optimizer {
         }
 
         // Localize script - used by both admin.js and bulk-optimizer.js
+        $site_title_raw = get_bloginfo('name');
+        $site_title_slug = function_exists('sanitize_title') ? sanitize_title($site_title_raw) : strtolower(preg_replace('/[^a-z0-9]+/i', '-', $site_title_raw));
         $localize_data = array(
             'ajaxUrl' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce('hozio_image_optimizer_nonce'),
             'pluginUrl' => HOZIO_IMAGE_OPTIMIZER_URL,
+            'siteTitle' => $site_title_raw,
+            'siteTitleSlug' => $site_title_slug,
             'strings' => array(
                 'processing' => __('Processing...', 'hozio-image-optimizer'),
                 'completed' => __('Completed!', 'hozio-image-optimizer'),

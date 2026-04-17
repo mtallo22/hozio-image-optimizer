@@ -239,6 +239,89 @@ class Hozio_Image_Optimizer_Settings {
     }
 
     /**
+     * Get per-tab status for sidebar chips.
+     * Levels: ok | warn | err | off. label is a short human hint.
+     */
+    public static function get_tab_statuses() {
+        $api_key = get_option('hozio_openai_api_key', '');
+        $has_api = !empty($api_key);
+
+        $compression_on = (bool) get_option('hozio_enable_compression', true);
+        $webp_on        = (bool) get_option('hozio_convert_to_webp', false);
+        $avif_on        = (bool) get_option('hozio_convert_to_avif', false);
+        $geo_on         = (bool) get_option('hozio_enable_geolocation', false);
+        $auto_on        = (bool) get_option('hozio_auto_optimize_on_upload', false);
+        $auto_ai        = (bool) get_option('hozio_auto_ai_rename', false);
+        $backup_on      = (bool) get_option('hozio_backup_enabled', true);
+        $retention      = (int) get_option('hozio_backup_retention_days', 30);
+
+        $license_key = get_option('hozio_license_key', '');
+        $licensed    = !empty($license_key);
+
+        // Auto-optimize warns if AI rename is on but no API key
+        $auto_level = 'off';
+        $auto_label = __('Disabled', 'hozio-image-optimizer');
+        if ($auto_on) {
+            if ($auto_ai && !$has_api) {
+                $auto_level = 'warn';
+                $auto_label = __('API key missing', 'hozio-image-optimizer');
+            } else {
+                $auto_level = 'ok';
+                $auto_label = __('Enabled', 'hozio-image-optimizer');
+            }
+        }
+
+        $format_level = 'off';
+        $format_label = __('Original only', 'hozio-image-optimizer');
+        if ($webp_on && $avif_on) {
+            $format_level = 'ok';
+            $format_label = 'WebP + AVIF';
+        } elseif ($webp_on) {
+            $format_level = 'ok';
+            $format_label = 'WebP';
+        } elseif ($avif_on) {
+            $format_level = 'ok';
+            $format_label = 'AVIF';
+        }
+
+        return array(
+            'api'           => $has_api
+                ? array('level' => 'ok',   'label' => __('Connected', 'hozio-image-optimizer'))
+                : array('level' => 'err',  'label' => __('No API key', 'hozio-image-optimizer')),
+            'compression'   => $compression_on
+                ? array('level' => 'ok',   'label' => (int) get_option('hozio_compression_quality', 82) . '%')
+                : array('level' => 'off',  'label' => __('Disabled', 'hozio-image-optimizer')),
+            'format'        => array('level' => $format_level, 'label' => $format_label),
+            'naming'        => (bool) get_option('hozio_enable_ai_rename', true)
+                ? array('level' => $has_api ? 'ok' : 'warn', 'label' => $has_api ? __('Configured', 'hozio-image-optimizer') : __('Needs API key', 'hozio-image-optimizer'))
+                : array('level' => 'off',  'label' => __('AI rename off', 'hozio-image-optimizer')),
+            'geolocation'   => $geo_on
+                ? array('level' => 'ok',   'label' => __('Embedding GPS', 'hozio-image-optimizer'))
+                : array('level' => 'off',  'label' => __('Disabled', 'hozio-image-optimizer')),
+            'auto_optimize' => array('level' => $auto_level, 'label' => $auto_label),
+            'backup'        => $backup_on
+                ? array('level' => 'ok',   'label' => sprintf(__('On, %dd', 'hozio-image-optimizer'), $retention))
+                : array('level' => 'warn', 'label' => __('Disabled', 'hozio-image-optimizer')),
+            'usage'         => array('level' => 'ok',   'label' => null),
+            'license'       => $licensed
+                ? array('level' => 'ok',   'label' => __('Licensed', 'hozio-image-optimizer'))
+                : array('level' => 'warn', 'label' => __('Unlicensed', 'hozio-image-optimizer')),
+        );
+    }
+
+    /**
+     * Get localized status level label ("OK", "WARN", "ERR", "OFF").
+     */
+    public static function get_status_chip_label($level) {
+        switch ($level) {
+            case 'ok':   return __('OK', 'hozio-image-optimizer');
+            case 'warn': return __('WARN', 'hozio-image-optimizer');
+            case 'err':  return __('ERR', 'hozio-image-optimizer');
+            default:     return __('OFF', 'hozio-image-optimizer');
+        }
+    }
+
+    /**
      * Render a field
      */
     public static function render_field($args) {

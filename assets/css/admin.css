@@ -7020,3 +7020,749 @@
 .skipped-notification-close:hover {
     background: rgba(180, 83, 9, 0.1);
 }
+
+/* =========================================================================
+   HZ v2 — Settings Page Redesign (sidebar + dense Grafana-style layout)
+   Scoped under .hozio-settings-page.hz-v2 so the Bulk Optimizer + Backups
+   pages (which share admin.css) are unaffected.
+   ========================================================================= */
+
+.hozio-settings-page.hz-v2 {
+    --hz-bg:        #f7f8fa;
+    --hz-surface:   #ffffff;
+    --hz-surface-2: #f3f4f6;
+    --hz-border:    #e5e7eb;
+    --hz-border-strong: #d1d5db;
+    --hz-text:      #111827;
+    --hz-text-2:    #374151;
+    --hz-muted:     #6b7280;
+    --hz-muted-2:   #9ca3af;
+    --hz-accent:    #4f46e5;
+    --hz-accent-2:  #6366f1;
+    --hz-ok:        #16a34a;
+    --hz-ok-bg:     #dcfce7;
+    --hz-warn:      #d97706;
+    --hz-warn-bg:   #fef3c7;
+    --hz-err:       #dc2626;
+    --hz-err-bg:    #fee2e2;
+    --hz-off:       #6b7280;
+    --hz-off-bg:    #e5e7eb;
+    --hz-radius:    8px;
+    --hz-radius-sm: 6px;
+    --hz-sidebar-w: 240px;
+}
+
+/* Neutralize WP default wrap horizontal padding / margins so our layout can
+   go edge-to-edge inside the admin body. */
+.hozio-settings-page.hz-v2 {
+    margin: 12px 20px 0 2px;
+    max-width: none;
+}
+
+/* ---- Top bar ---- */
+.hozio-settings-page.hz-v2 .hz-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 10px 16px;
+    background: var(--hz-surface);
+    border: 1px solid var(--hz-border);
+    border-radius: var(--hz-radius);
+    margin-bottom: 10px;
+}
+.hozio-settings-page.hz-v2 .hz-topbar-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.hozio-settings-page.hz-v2 .hz-logo-img {
+    height: 28px;
+    width: auto;
+    display: block;
+}
+.hozio-settings-page.hz-v2 .hz-topbar-title {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+}
+.hozio-settings-page.hz-v2 .hz-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--hz-text);
+    letter-spacing: -0.01em;
+}
+.hozio-settings-page.hz-v2 .hz-version {
+    font-size: 11px;
+    color: var(--hz-muted);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    padding: 2px 6px;
+    background: var(--hz-surface-2);
+    border-radius: 4px;
+}
+.hozio-settings-page.hz-v2 .hz-topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.hozio-settings-page.hz-v2 .hz-nav-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--hz-text-2);
+    background: var(--hz-surface);
+    border: 1px solid var(--hz-border);
+    border-radius: var(--hz-radius-sm);
+    text-decoration: none;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.hozio-settings-page.hz-v2 .hz-nav-link:hover {
+    background: var(--hz-surface-2);
+    color: var(--hz-accent);
+    border-color: var(--hz-border-strong);
+}
+.hozio-settings-page.hz-v2 .hz-nav-link .dashicons {
+    font-size: 14px;
+    width: 14px;
+    height: 14px;
+    line-height: 1;
+}
+.hozio-settings-page.hz-v2 .hz-palette-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    font-size: 12px;
+    color: var(--hz-muted);
+    background: var(--hz-surface);
+    border: 1px solid var(--hz-border);
+    border-radius: var(--hz-radius-sm);
+    cursor: pointer;
+    min-width: 220px;
+    transition: border-color 0.15s, background 0.15s;
+}
+.hozio-settings-page.hz-v2 .hz-palette-trigger:hover {
+    background: var(--hz-surface-2);
+    border-color: var(--hz-border-strong);
+}
+.hozio-settings-page.hz-v2 .hz-palette-trigger .dashicons {
+    font-size: 14px;
+    width: 14px;
+    height: 14px;
+}
+.hozio-settings-page.hz-v2 .hz-palette-trigger-label {
+    flex: 1;
+    text-align: left;
+}
+.hozio-settings-page.hz-v2 .hz-kbd {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--hz-muted);
+    background: var(--hz-surface-2);
+    border: 1px solid var(--hz-border);
+    border-radius: 4px;
+    padding: 1px 5px;
+    line-height: 1.5;
+    white-space: nowrap;
+}
+.hozio-settings-page.hz-v2 .hz-kbd-inline {
+    margin-left: 4px;
+}
+
+/* ---- System status strip ---- */
+.hozio-settings-page.hz-v2 .hz-status-strip {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 8px;
+    margin-bottom: 10px;
+}
+.hozio-settings-page.hz-v2 .hz-stat {
+    background: var(--hz-surface);
+    border: 1px solid var(--hz-border);
+    border-radius: var(--hz-radius-sm);
+    padding: 8px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+.hozio-settings-page.hz-v2 .hz-stat-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--hz-muted);
+    font-weight: 600;
+}
+.hozio-settings-page.hz-v2 .hz-stat-value {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--hz-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.hozio-settings-page.hz-v2 .hz-stat-mono {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 13px;
+}
+
+/* ---- Main shell: sidebar + content ---- */
+.hozio-settings-page.hz-v2 .hz-shell {
+    display: grid;
+    grid-template-columns: var(--hz-sidebar-w) minmax(0, 1fr);
+    gap: 12px;
+    align-items: start;
+}
+
+/* ---- Sidebar ---- */
+.hozio-settings-page.hz-v2 .hz-sidebar {
+    position: sticky;
+    top: 42px;
+    align-self: start;
+    background: var(--hz-surface);
+    border: 1px solid var(--hz-border);
+    border-radius: var(--hz-radius);
+    padding: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: calc(100vh - 60px);
+    overflow-y: auto;
+}
+.hozio-settings-page.hz-v2 .hz-sidebar-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.hozio-settings-page.hz-v2 .hz-sidenav-item {
+    display: grid;
+    grid-template-columns: 18px 1fr auto;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: var(--hz-radius-sm);
+    color: var(--hz-text-2);
+    text-decoration: none;
+    font-size: 12.5px;
+    font-weight: 500;
+    transition: background 0.15s, color 0.15s;
+    border: 1px solid transparent;
+}
+.hozio-settings-page.hz-v2 .hz-sidenav-item:hover {
+    background: var(--hz-surface-2);
+    color: var(--hz-text);
+}
+.hozio-settings-page.hz-v2 .hz-sidenav-item.active {
+    background: #eef2ff;
+    color: var(--hz-accent);
+    border-color: #c7d2fe;
+    font-weight: 600;
+}
+.hozio-settings-page.hz-v2 .hz-sidenav-item .dashicons {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+    line-height: 1;
+}
+.hozio-settings-page.hz-v2 .hz-sidenav-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.hozio-settings-page.hz-v2 .hz-sidebar-foot {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--hz-border);
+}
+.hozio-settings-page.hz-v2 .hz-palette-trigger-mini {
+    width: 100%;
+    min-width: 0;
+    padding: 6px 8px;
+    font-size: 11px;
+}
+
+/* ---- Status chips ---- */
+.hozio-settings-page.hz-v2 .hz-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    padding: 2px 6px;
+    border-radius: 4px;
+    line-height: 1.4;
+    min-width: 30px;
+    text-align: center;
+    border: 1px solid transparent;
+}
+.hozio-settings-page.hz-v2 .hz-chip-sm {
+    font-size: 9px;
+    padding: 1px 5px;
+    min-width: 0;
+}
+.hozio-settings-page.hz-v2 .hz-chip-ok   { color: var(--hz-ok);   background: var(--hz-ok-bg);   border-color: #bbf7d0; }
+.hozio-settings-page.hz-v2 .hz-chip-warn { color: var(--hz-warn); background: var(--hz-warn-bg); border-color: #fde68a; }
+.hozio-settings-page.hz-v2 .hz-chip-err  { color: var(--hz-err);  background: var(--hz-err-bg);  border-color: #fecaca; }
+.hozio-settings-page.hz-v2 .hz-chip-off  { color: var(--hz-off);  background: var(--hz-off-bg);  border-color: var(--hz-border-strong); }
+
+/* ---- Settings content + panel show/hide ---- */
+.hozio-settings-page.hz-v2 .hz-settings-content {
+    min-width: 0;
+}
+.hozio-settings-page.hz-v2 .hozio-settings-main {
+    max-width: 960px;
+}
+.hozio-settings-page.hz-v2 .hz-tab-panel {
+    display: none;
+}
+.hozio-settings-page.hz-v2 .hz-tab-panel.hz-active {
+    display: block;
+    animation: hz-panel-fade 0.18s ease-out;
+}
+@keyframes hz-panel-fade {
+    from { opacity: 0; transform: translateY(2px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .hozio-settings-page.hz-v2 .hz-tab-panel.hz-active {
+        animation: none;
+    }
+}
+
+/* ---- Density tweaks over existing card system (scoped) ---- */
+.hozio-settings-page.hz-v2 .hozio-card {
+    margin-bottom: 12px;
+}
+.hozio-settings-page.hz-v2 .hozio-card-header {
+    padding: 14px 16px;
+}
+.hozio-settings-page.hz-v2 .hozio-card-body {
+    padding: 16px;
+}
+.hozio-settings-page.hz-v2 .hozio-card-header h2 {
+    font-size: 14px;
+    margin: 0;
+}
+.hozio-settings-page.hz-v2 .hozio-card-header p {
+    font-size: 12px;
+    margin: 2px 0 0;
+    color: var(--hz-muted);
+}
+
+/* Field being highlighted by command palette */
+.hozio-settings-page.hz-v2 .hz-flash {
+    animation: hz-flash-ring 1.4s ease-out;
+    border-radius: var(--hz-radius-sm);
+}
+@keyframes hz-flash-ring {
+    0%   { box-shadow: 0 0 0 0   rgba(99, 102, 241, 0.55); }
+    40%  { box-shadow: 0 0 0 6px rgba(99, 102, 241, 0.25); }
+    100% { box-shadow: 0 0 0 0   rgba(99, 102, 241, 0);    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .hozio-settings-page.hz-v2 .hz-flash {
+        animation: none;
+        outline: 2px solid var(--hz-accent);
+        outline-offset: 2px;
+    }
+}
+
+/* ---- Sticky save bar ---- */
+.hozio-settings-page.hz-v2 .hz-save-bar {
+    position: fixed;
+    left: 160px; /* past the WP admin sidebar */
+    right: 20px;
+    bottom: 16px;
+    z-index: 1000;
+    background: var(--hz-text);
+    color: #fff;
+    border-radius: var(--hz-radius);
+    box-shadow: 0 10px 30px rgba(17, 24, 39, 0.25), 0 0 0 1px rgba(255,255,255,0.04) inset;
+    transform: translateY(8px);
+    opacity: 0;
+    pointer-events: none;
+    transition: transform 0.18s ease-out, opacity 0.18s ease-out;
+}
+.hozio-settings-page.hz-v2 .hz-save-bar.hz-show {
+    transform: translateY(0);
+    opacity: 1;
+    pointer-events: auto;
+}
+.hozio-settings-page.hz-v2 .hz-save-bar[hidden] {
+    display: none;
+}
+.hozio-settings-page.hz-v2 .hz-save-bar-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 10px 14px;
+}
+.hozio-settings-page.hz-v2 .hz-save-bar-status {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: #e5e7eb;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.hozio-settings-page.hz-v2 .hz-save-bar-status::before {
+    content: "";
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #f59e0b;
+    box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.25);
+    flex: 0 0 auto;
+}
+.hozio-settings-page.hz-v2 .hz-save-bar-actions {
+    display: flex;
+    gap: 8px;
+}
+.hozio-settings-page.hz-v2 .hz-save-bar .hz-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 14px;
+    font-size: 12.5px;
+    font-weight: 600;
+    border-radius: var(--hz-radius-sm);
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+}
+.hozio-settings-page.hz-v2 .hz-save-bar .hz-btn-ghost {
+    background: transparent;
+    color: #d1d5db;
+    border-color: #374151;
+}
+.hozio-settings-page.hz-v2 .hz-save-bar .hz-btn-ghost:hover {
+    background: #1f2937;
+    color: #fff;
+}
+.hozio-settings-page.hz-v2 .hz-save-bar .hz-btn-primary {
+    background: var(--hz-accent);
+    color: #fff;
+    border-color: var(--hz-accent);
+}
+.hozio-settings-page.hz-v2 .hz-save-bar .hz-btn-primary:hover {
+    background: var(--hz-accent-2);
+}
+.hozio-settings-page.hz-v2 .hz-save-bar .hz-kbd {
+    color: #fff;
+    background: rgba(255,255,255,0.12);
+    border-color: rgba(255,255,255,0.2);
+}
+
+/* ---- Command palette modal ---- */
+.hozio-settings-page.hz-v2 .hz-palette {
+    position: fixed;
+    inset: 0;
+    z-index: 100000;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 15vh;
+}
+.hozio-settings-page.hz-v2 .hz-palette[hidden] {
+    display: none;
+}
+.hozio-settings-page.hz-v2 .hz-palette-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(17, 24, 39, 0.55);
+    backdrop-filter: blur(2px);
+}
+.hozio-settings-page.hz-v2 .hz-palette-panel {
+    position: relative;
+    width: min(640px, 92vw);
+    background: var(--hz-surface);
+    border-radius: 12px;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.25);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    max-height: 70vh;
+}
+.hozio-settings-page.hz-v2 .hz-palette-search {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--hz-border);
+}
+.hozio-settings-page.hz-v2 .hz-palette-search .dashicons {
+    color: var(--hz-muted);
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+}
+.hozio-settings-page.hz-v2 #hz-palette-input {
+    flex: 1;
+    border: none;
+    outline: none;
+    font-size: 14px;
+    background: transparent;
+    color: var(--hz-text);
+    padding: 2px 0;
+}
+.hozio-settings-page.hz-v2 .hz-palette-close {
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+}
+.hozio-settings-page.hz-v2 .hz-palette-results {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: 4px;
+}
+.hozio-settings-page.hz-v2 .hz-palette-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: var(--hz-radius-sm);
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--hz-text-2);
+}
+.hozio-settings-page.hz-v2 .hz-palette-item .dashicons {
+    color: var(--hz-muted);
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+}
+.hozio-settings-page.hz-v2 .hz-palette-item-label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.hozio-settings-page.hz-v2 .hz-palette-item-tab {
+    font-size: 10.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--hz-muted);
+    background: var(--hz-surface-2);
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+.hozio-settings-page.hz-v2 .hz-palette-item.hz-active,
+.hozio-settings-page.hz-v2 .hz-palette-item:hover {
+    background: #eef2ff;
+    color: var(--hz-accent);
+}
+.hozio-settings-page.hz-v2 .hz-palette-empty {
+    padding: 24px 14px;
+    text-align: center;
+    color: var(--hz-muted);
+    font-size: 12.5px;
+}
+.hozio-settings-page.hz-v2 .hz-palette-hint {
+    display: flex;
+    justify-content: flex-start;
+    gap: 16px;
+    padding: 8px 14px;
+    border-top: 1px solid var(--hz-border);
+    font-size: 11px;
+    color: var(--hz-muted);
+}
+.hozio-settings-page.hz-v2 .hz-palette-hint .hz-kbd {
+    margin-right: 2px;
+}
+
+/* ---- Live naming preview card ---- */
+.hozio-settings-page.hz-v2 .hz-preview-card {
+    background: var(--hz-surface);
+    border: 1px solid var(--hz-border);
+    border-left: 3px solid var(--hz-accent);
+    border-radius: var(--hz-radius);
+    padding: 12px 14px;
+    margin-bottom: 12px;
+    position: sticky;
+    top: 42px;
+    z-index: 5;
+}
+.hozio-settings-page.hz-v2 .hz-preview-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+.hozio-settings-page.hz-v2 .hz-preview-head .dashicons {
+    color: var(--hz-accent);
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+}
+.hozio-settings-page.hz-v2 .hz-preview-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--hz-text);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    flex: 1;
+}
+.hozio-settings-page.hz-v2 .hz-preview-grid {
+    display: grid;
+    grid-template-columns: 120px 1fr;
+    gap: 6px 12px;
+    margin: 0;
+}
+.hozio-settings-page.hz-v2 .hz-preview-grid dt {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--hz-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    align-self: center;
+}
+.hozio-settings-page.hz-v2 .hz-preview-grid dd {
+    margin: 0;
+    font-size: 13px;
+    color: var(--hz-text);
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+.hozio-settings-page.hz-v2 .hz-preview-template,
+.hozio-settings-page.hz-v2 .hz-preview-output {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12.5px;
+    background: var(--hz-surface-2);
+    padding: 3px 6px;
+    border-radius: 4px;
+    border: 1px solid var(--hz-border);
+    display: inline-block;
+}
+.hozio-settings-page.hz-v2 .hz-preview-output {
+    color: var(--hz-accent);
+    background: #eef2ff;
+    border-color: #c7d2fe;
+    font-weight: 600;
+}
+.hozio-settings-page.hz-v2 .hz-preview-title-output {
+    font-weight: 600;
+    color: var(--hz-text);
+}
+
+/* ---- License card styling (v2 scope) ---- */
+.hozio-settings-page.hz-v2 .hz-license-section {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.hozio-settings-page.hz-v2 .hz-license-card {
+    background: var(--hz-surface);
+    border: 1px solid var(--hz-border);
+    border-radius: var(--hz-radius);
+    padding: 14px 16px;
+}
+.hozio-settings-page.hz-v2 .hz-license-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.hozio-settings-page.hz-v2 .hz-license-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--hz-text);
+}
+.hozio-settings-page.hz-v2 .hz-license-version {
+    font-size: 11px;
+    color: var(--hz-muted);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.hozio-settings-page.hz-v2 .hz-license-status {
+    margin-left: auto;
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 3px 8px;
+    border-radius: 4px;
+    border: 1px solid transparent;
+}
+.hozio-settings-page.hz-v2 .hz-license-status.active {
+    color: var(--hz-ok);
+    background: var(--hz-ok-bg);
+    border-color: #bbf7d0;
+}
+.hozio-settings-page.hz-v2 .hz-license-status.inactive {
+    color: var(--hz-warn);
+    background: var(--hz-warn-bg);
+    border-color: #fde68a;
+}
+.hozio-settings-page.hz-v2 .hz-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    border-radius: var(--hz-radius-sm);
+    border: 1px solid var(--hz-border);
+    cursor: pointer;
+    background: var(--hz-surface);
+    color: var(--hz-text-2);
+    text-decoration: none;
+    transition: background 0.15s, border-color 0.15s;
+}
+.hozio-settings-page.hz-v2 .hz-btn:hover {
+    background: var(--hz-surface-2);
+    border-color: var(--hz-border-strong);
+}
+.hozio-settings-page.hz-v2 .hz-btn-primary {
+    background: var(--hz-accent);
+    border-color: var(--hz-accent);
+    color: #fff;
+}
+.hozio-settings-page.hz-v2 .hz-btn-primary:hover {
+    background: var(--hz-accent-2);
+    color: #fff;
+}
+.hozio-settings-page.hz-v2 .hz-btn-ghost {
+    background: transparent;
+}
+
+/* ---- Responsive: collapse sidebar below WP's 782px admin breakpoint ---- */
+@media (max-width: 782px) {
+    .hozio-settings-page.hz-v2 .hz-shell {
+        grid-template-columns: minmax(0, 1fr);
+    }
+    .hozio-settings-page.hz-v2 .hz-sidebar {
+        position: static;
+        max-height: none;
+    }
+    .hozio-settings-page.hz-v2 .hz-sidebar-nav {
+        flex-direction: row;
+        overflow-x: auto;
+        flex-wrap: nowrap;
+    }
+    .hozio-settings-page.hz-v2 .hz-sidenav-item {
+        flex: 0 0 auto;
+        grid-template-columns: 18px auto auto;
+    }
+    .hozio-settings-page.hz-v2 .hz-sidebar-foot {
+        display: none;
+    }
+    .hozio-settings-page.hz-v2 .hz-status-strip {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    .hozio-settings-page.hz-v2 .hz-save-bar {
+        left: 12px;
+        right: 12px;
+    }
+    .hozio-settings-page.hz-v2 .hz-preview-card {
+        position: static;
+    }
+}
