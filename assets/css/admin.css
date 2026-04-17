@@ -3448,106 +3448,8 @@
 }
 
 /* Settings Layout */
-/* Hide old settings layout elements */
-.hozio-settings-layout {
-    display: none;
-}
-
-.hozio-settings-header {
-    display: none;
-}
-
-.hozio-settings-nav {
-    display: none;
-}
-
-/* New settings content - single column */
-.hz-settings-content {
-    max-width: 800px;
-}
-
-.hz-settings-content .hozio-settings-main {
-    background: transparent;
-    box-shadow: none;
-    border: none;
-}
-
-/* Settings cards - clean white, no gradient headers */
-.hz-settings-content .hozio-card {
-    background: #fff;
-    border: 1px solid #e5e7eb;
-    border-radius: 10px;
-    margin-bottom: 16px;
-    overflow: hidden;
-}
-
-.hz-settings-content .hozio-card-header {
-    display: flex !important;
-    padding: 14px 20px;
-    border-bottom: 1px solid #f3f4f6;
-    gap: 12px;
-    align-items: center;
-}
-
-.hz-settings-content .hozio-card-header h2 {
-    font-size: 14px;
-    font-weight: 700;
-    margin: 0;
-    color: #111827;
-}
-
-.hz-settings-content .hozio-card-header p {
-    font-size: 11px;
-    color: #9ca3af;
-    margin: 1px 0 0;
-}
-
-/* Hide gradient icon squares in settings */
-.hz-settings-content .hozio-card-icon {
-    width: 32px;
-    height: 32px;
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: #f3f4f6;
-}
-
-.hz-settings-content .hozio-card-icon .dashicons {
-    color: #6b7280;
-    font-size: 16px;
-    width: 16px;
-    height: 16px;
-}
-
-.hz-settings-content .hozio-card-body {
-    padding: 20px;
-}
-
-/* Cleaner field labels */
-.hz-settings-content .hozio-field-label {
-    font-size: 12px;
-    font-weight: 600;
-    color: #374151;
-    margin-bottom: 4px;
-}
-
-.hz-settings-content .hozio-field-hint {
-    font-size: 11px;
-    color: #9ca3af;
-    margin-top: 4px;
-}
-
-.hz-settings-content .hozio-field-group {
-    margin-bottom: 16px;
-}
-
-/* Settings form actions */
-.hz-settings-content .hozio-form-actions {
-    padding: 12px 20px;
-    background: #fafbfc;
-    border-top: 1px solid #f3f4f6;
-    border-radius: 0 0 10px 10px;
+/* Old settings rules removed - consolidated into Settings Page Card Overrides above */
+.dummy-placeholder-for-removed-rules {
 }
 
 /* License & Updates tab */
@@ -3610,13 +3512,189 @@
     color: #ef4444;
 }
 
-/* Settings page overrides to ensure cards display properly */
+/* ===== Settings Page Card Overrides ===== */
 .hz-settings-content .hozio-card {
     display: block !important;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    margin-bottom: 16px;
+    box-shadow: none;
+    overflow: hidden;
 }
 
 .hz-settings-content .hozio-card-header {
     display: flex !important;
+    padding: 14px 20px;
+    border-bottom: 1px solid #f3f4f6;
+    gap: 10px;
+    align-items: center;
+    background: #fff;
+}
+
+.hz-settings-content .hozio-card-header h2 {
+    font-size: 13px;
+    font-weight: 700;
+    color: #111827;
+    margin: 0;
+}
+
+.hz-settings-content .hozio-card-header p {
+    font-size: 11px;
+    color: #9ca3af;
+    margin: 1px 0 0;
+}
+
+/* Replace gradient icons with clean grey in settings */
+.hz-settings-content .hozio-card-icon {
+    width: 30px !important;
+    height: 30px !important;
+    border-radius: 7px !important;
+    background: #f3f4f6 !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.hz-settings-content .hozio-card-icon .dashicons {
+    color: #6b7280 !important;
+    font-size: 15px !important;
+    width: 15px !important;
+    height: 15px !important;
+}
+
+.hz-settings-content .hozio-card-body {
+    padding: 20px;
+}
+
+/* Settings form fields - cleaner */
+.hz-settings-content .hozio-field-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 4px;
+    display: block;
+}
+
+.hz-settings-content .hozio-field-hint {
+    font-size: 10px;
+    color: #9ca3af;
+    margin-top: 3px;
+}
+
+.hz-settings-content .hozio-field-group {
+    margin-bottom: 14px;
+}
+
+/* Settings inputs */
+.hz-settings-content .hozio-input {
+    padding: 8px 12px;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    font-size: 13px;
+    transition: border-color 0.12s;
+}
+
+.hz-settings-content .hozio-input:focus {
+    border-color: #6366f1;
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(99,102,241,0.1);
+}
+
+/* Settings form actions */
+.hz-settings-content .hozio-form-actions {
+    padding: 12px 20px;
+    background: #fafbfc;
+    border-top: 1px solid #f3f4f6;
+    border-radius: 0 0 10px 10px;
+}
+
+/* Settings page wrapper */
+.hz-settings-content {
+    max-width: 800px;
+}
+
+.hz-settings-content .hozio-settings-main {
+    background: transparent !important;
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+/* Hide old settings elements */
+.hozio-settings-page .hozio-settings-header {
+    display: none !important;
+}
+
+.hozio-settings-page .hozio-settings-nav {
+    display: none !important;
+}
+
+.hozio-settings-page .hozio-settings-layout {
+    display: block !important;
+    grid-template-columns: none !important;
+}
+
+/* ===== Tab Navigation (shared across all pages) ===== */
+.hz-tab-nav {
+    display: flex;
+    gap: 2px;
+    margin-bottom: 16px;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 3px;
+    width: fit-content;
+}
+
+.hz-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 16px;
+    text-decoration: none;
+    color: #6b7280;
+    font-size: 12px;
+    font-weight: 600;
+    border-radius: 6px;
+    transition: all 0.12s;
+    white-space: nowrap;
+}
+
+.hz-tab:hover {
+    color: #111827;
+    background: #f3f4f6;
+}
+
+.hz-tab.active {
+    background: #111827;
+    color: #fff;
+}
+
+.hz-tab-count {
+    background: rgba(255,255,255,0.2);
+    padding: 1px 6px;
+    border-radius: 8px;
+    font-size: 10px;
+    font-weight: 700;
+}
+
+.hz-tab:not(.active) .hz-tab-count {
+    background: #e5e7eb;
+    color: #6b7280;
+}
+
+.hz-tab-count-red {
+    background: #fef2f2 !important;
+    color: #ef4444 !important;
+}
+
+.hz-tab.active .hz-tab-count-red {
+    background: rgba(239,68,68,0.3) !important;
+    color: #fff !important;
 }
 
 /* Tab nav scroll for many tabs */
