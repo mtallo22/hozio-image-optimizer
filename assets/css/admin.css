@@ -7726,8 +7726,21 @@
     border-color: var(--hz-accent);
     color: #fff;
 }
-.hozio-settings-page.hz-v2 .hz-btn-primary:hover {
+/* Override WP admin global a:hover/visited/focus which turns link text dark */
+.hozio-settings-page.hz-v2 .hz-btn-primary,
+.hozio-settings-page.hz-v2 a.hz-btn-primary,
+.hozio-settings-page.hz-v2 a.hz-btn-primary:link,
+.hozio-settings-page.hz-v2 a.hz-btn-primary:visited,
+.hozio-settings-page.hz-v2 a.hz-btn-primary:hover,
+.hozio-settings-page.hz-v2 a.hz-btn-primary:focus,
+.hozio-settings-page.hz-v2 a.hz-btn-primary:active {
+    color: #fff;
+    text-decoration: none;
+}
+.hozio-settings-page.hz-v2 .hz-btn-primary:hover,
+.hozio-settings-page.hz-v2 a.hz-btn-primary:hover {
     background: var(--hz-accent-2);
+    border-color: var(--hz-accent-2);
     color: #fff;
 }
 .hozio-settings-page.hz-v2 .hz-btn-ghost {
