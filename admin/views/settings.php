@@ -1076,16 +1076,17 @@ $system_stats = array(
                                 </div>
                             </div>
 
-                            <div class="hozio-field-group" style="margin-top: 15px;">
+                            <div class="hozio-field-group hz-geocode-test-wrap" style="margin-top: 15px;">
                                 <label class="hozio-field-label"><?php esc_html_e('Test Geocoding', 'hozio-image-optimizer'); ?></label>
-                                <div class="hozio-input-group" style="display: flex; gap: 10px;">
-                                    <input type="text" id="test-geocode-location" class="hozio-input" placeholder="<?php esc_attr_e('Enter a location (e.g., Boston, MA)', 'hozio-image-optimizer'); ?>" style="flex: 1;">
+                                <div style="display:flex;gap:10px;">
+                                    <input type="text" id="test-geocode-location" class="hozio-input" placeholder="<?php esc_attr_e('Enter a location (e.g., Boston, MA)', 'hozio-image-optimizer'); ?>" style="flex:1;">
                                     <button type="button" id="test-geocode-btn" class="hozio-btn hozio-btn-secondary">
                                         <span class="dashicons dashicons-location"></span>
                                         <?php esc_html_e('Test', 'hozio-image-optimizer'); ?>
                                     </button>
                                 </div>
-                                <div id="geocode-result" style="margin-top: 10px; display: none;"></div>
+                                <div id="geocode-result" class="hz-geocode-msg" hidden></div>
+                                <div id="geocode-map" class="hz-loc-map" hidden></div>
                             </div>
                         </div>
                     </div>
@@ -1133,9 +1134,16 @@ $system_stats = array(
                                                    class="hozio-input location-lng"
                                                    placeholder="<?php esc_attr_e('Longitude', 'hozio-image-optimizer'); ?>">
                                         </div>
+                                        <button type="button" class="hozio-btn hozio-btn-secondary hz-view-loc-btn"
+                                                data-lat="<?php echo esc_attr($location['lat']); ?>"
+                                                data-lng="<?php echo esc_attr($location['lng']); ?>"
+                                                title="<?php esc_attr_e('Preview on map', 'hozio-image-optimizer'); ?>">
+                                            <span class="dashicons dashicons-location"></span>
+                                        </button>
                                         <button type="button" class="hozio-btn hozio-btn-danger remove-location">
                                             <span class="dashicons dashicons-trash"></span>
                                         </button>
+                                        <div class="hz-loc-map hz-row-map" hidden></div>
                                     </div>
                                 <?php
                                     endforeach;
@@ -1143,20 +1151,42 @@ $system_stats = array(
                                 ?>
                             </div>
 
-                            <div class="add-location-section" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
-                                <h4 style="margin: 0 0 15px;"><?php esc_html_e('Add New Location', 'hozio-image-optimizer'); ?></h4>
-                                <div class="new-location-fields" style="display: flex; gap: 10px; flex-wrap: wrap;">
-                                    <input type="text" id="new-location-name" class="hozio-input" placeholder="<?php esc_attr_e('Location Name (e.g., Main Office)', 'hozio-image-optimizer'); ?>" style="flex: 2; min-width: 200px;">
-                                    <input type="text" id="new-location-lat" class="hozio-input" placeholder="<?php esc_attr_e('Latitude (e.g., 40.7128)', 'hozio-image-optimizer'); ?>" style="flex: 1; min-width: 120px;">
-                                    <input type="text" id="new-location-lng" class="hozio-input" placeholder="<?php esc_attr_e('Longitude (e.g., -74.0060)', 'hozio-image-optimizer'); ?>" style="flex: 1; min-width: 120px;">
-                                    <button type="button" id="add-custom-location" class="hozio-btn hozio-btn-secondary">
-                                        <span class="dashicons dashicons-plus-alt2"></span>
-                                        <?php esc_html_e('Add', 'hozio-image-optimizer'); ?>
+                            <!-- Add New Location -->
+                            <div class="hz-add-location-section">
+                                <h4 class="hz-add-loc-heading"><?php esc_html_e('Add New Location', 'hozio-image-optimizer'); ?></h4>
+
+                                <!-- Search autocomplete -->
+                                <div class="hz-loc-search-wrap">
+                                    <div class="hz-loc-search-field">
+                                        <span class="dashicons dashicons-search"></span>
+                                        <input type="text" id="hz-loc-search" class="hozio-input"
+                                               placeholder="<?php esc_attr_e('Search for a location (e.g., Huntington, NY)…', 'hozio-image-optimizer'); ?>"
+                                               autocomplete="off">
+                                        <span class="dashicons dashicons-update spin hz-loc-spinner" id="hz-loc-spinner" hidden></span>
+                                    </div>
+                                    <div id="hz-loc-dropdown" class="hz-loc-dropdown" hidden></div>
+                                </div>
+
+                                <!-- Name + Coords row (editable, auto-filled on selection) -->
+                                <div class="hz-loc-fields">
+                                    <input type="text" id="new-location-name" class="hozio-input hz-loc-name" placeholder="<?php esc_attr_e('Display Name', 'hozio-image-optimizer'); ?>">
+                                    <input type="text" id="new-location-lat" class="hozio-input hz-loc-coord" placeholder="<?php esc_attr_e('Latitude', 'hozio-image-optimizer'); ?>">
+                                    <input type="text" id="new-location-lng" class="hozio-input hz-loc-coord" placeholder="<?php esc_attr_e('Longitude', 'hozio-image-optimizer'); ?>">
+                                    <button type="button" id="hz-preview-new-loc" class="hozio-btn hozio-btn-secondary" disabled title="<?php esc_attr_e('Preview on map', 'hozio-image-optimizer'); ?>">
+                                        <span class="dashicons dashicons-location"></span>
                                     </button>
                                 </div>
-                                <p class="hozio-field-hint" style="margin-top: 10px;">
-                                    <?php esc_html_e('Tip: You can find coordinates by right-clicking on Google Maps and selecting "What\'s here?"', 'hozio-image-optimizer'); ?>
-                                </p>
+
+                                <!-- Map preview for new location -->
+                                <div id="hz-new-loc-map" class="hz-loc-map" hidden></div>
+
+                                <div class="hz-add-loc-footer">
+                                    <button type="button" id="add-custom-location" class="hozio-btn hozio-btn-primary" disabled>
+                                        <span class="dashicons dashicons-plus-alt2"></span>
+                                        <?php esc_html_e('Add Location', 'hozio-image-optimizer'); ?>
+                                    </button>
+                                    <p class="hozio-field-hint"><?php esc_html_e('Search above to auto-fill coordinates, or enter latitude and longitude manually.', 'hozio-image-optimizer'); ?></p>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1166,76 +1196,145 @@ $system_stats = array(
                     </div>
                 </form>
 
-                <style>
-                .custom-location-row {
-                    display: flex;
-                    gap: 10px;
-                    align-items: center;
-                    margin-bottom: 10px;
-                    padding: 15px;
-                    background: #f8fafc;
-                    border-radius: 8px;
-                    border: 1px solid #e5e7eb;
-                }
-                .custom-location-row .location-fields {
-                    display: flex;
-                    gap: 10px;
-                    flex: 1;
-                    flex-wrap: wrap;
-                }
-                .custom-location-row .location-name {
-                    flex: 2;
-                    min-width: 150px;
-                }
-                .custom-location-row .location-lat,
-                .custom-location-row .location-lng {
-                    flex: 1;
-                    min-width: 100px;
-                }
-                .hozio-btn-danger {
-                    background: #ef4444 !important;
-                    border-color: #ef4444 !important;
-                    color: #fff !important;
-                }
-                .hozio-btn-danger:hover {
-                    background: #dc2626 !important;
-                }
-                </style>
-
                 <script>
                 jQuery(document).ready(function($) {
                     var locationIndex = <?php echo count($custom_locations); ?>;
 
-                    // Add new location
+                    /* ---- Shared map helper ---- */
+                    function buildMapHtml(lat, lng, displayName) {
+                        lat = parseFloat(lat); lng = parseFloat(lng);
+                        var m = 0.018;
+                        var bbox = (lng-m)+','+(lat-m)+','+(lng+m)+','+(lat+m);
+                        var osmSrc = 'https://www.openstreetmap.org/export/embed.html?bbox='+bbox+'&layer=mapnik&marker='+lat+','+lng;
+                        var gmUrl = 'https://www.google.com/maps?q='+lat+','+lng;
+                        return '<div class="hz-map-card">' +
+                            '<iframe class="hz-map-frame" src="' + osmSrc + '" allowfullscreen loading="lazy"></iframe>' +
+                            '<div class="hz-map-footer">' +
+                            (displayName ? '<span class="hz-map-name">' + $('<span>').text(displayName).html() + '</span>' : '') +
+                            '<span class="hz-map-coords">' + lat.toFixed(6) + ', ' + lng.toFixed(6) + '</span>' +
+                            '<a href="' + gmUrl + '" target="_blank" rel="noopener" class="hz-map-gmaps-link"><span class="dashicons dashicons-external"></span> Google Maps</a>' +
+                            '</div></div>';
+                    }
+
+                    /* ---- Remove location ---- */
+                    $(document).on('click', '.remove-location', function() {
+                        $(this).closest('.custom-location-row').remove();
+                    });
+
+                    /* ---- View map on existing rows ---- */
+                    $(document).on('click', '.hz-view-loc-btn', function() {
+                        var $btn  = $(this);
+                        var $row  = $btn.closest('.custom-location-row');
+                        var $map  = $row.find('.hz-row-map');
+                        var lat   = $btn.data('lat') || $row.find('.location-lat').val();
+                        var lng   = $btn.data('lng') || $row.find('.location-lng').val();
+                        if (!lat || !lng) { return; }
+                        if (!$map.prop('hidden')) { $map.attr('hidden', true).empty(); return; }
+                        $map.html(buildMapHtml(lat, lng, $row.find('.location-name').val())).removeAttr('hidden');
+                    });
+
+                    /* ---- Add location ---- */
                     $('#add-custom-location').on('click', function() {
                         var name = $('#new-location-name').val().trim();
-                        var lat = $('#new-location-lat').val().trim();
-                        var lng = $('#new-location-lng').val().trim();
-
-                        if (!name || !lat || !lng) {
-                            alert('<?php esc_html_e('Please fill in all fields', 'hozio-image-optimizer'); ?>');
-                            return;
-                        }
+                        var lat  = $('#new-location-lat').val().trim();
+                        var lng  = $('#new-location-lng').val().trim();
+                        if (!name || !lat || !lng) { return; }
 
                         var html = '<div class="custom-location-row" data-index="' + locationIndex + '">' +
                             '<div class="location-fields">' +
-                            '<input type="text" name="hozio_custom_locations[' + locationIndex + '][name]" value="' + name + '" class="hozio-input location-name" placeholder="Location Name">' +
-                            '<input type="text" name="hozio_custom_locations[' + locationIndex + '][lat]" value="' + lat + '" class="hozio-input location-lat" placeholder="Latitude">' +
-                            '<input type="text" name="hozio_custom_locations[' + locationIndex + '][lng]" value="' + lng + '" class="hozio-input location-lng" placeholder="Longitude">' +
+                            '<input type="text" name="hozio_custom_locations[' + locationIndex + '][name]" value="' + $('<span>').text(name).html() + '" class="hozio-input location-name" placeholder="<?php echo esc_js(__('Location Name', 'hozio-image-optimizer')); ?>">' +
+                            '<input type="text" name="hozio_custom_locations[' + locationIndex + '][lat]" value="' + $('<span>').text(lat).html() + '" class="hozio-input location-lat" placeholder="<?php echo esc_js(__('Latitude', 'hozio-image-optimizer')); ?>">' +
+                            '<input type="text" name="hozio_custom_locations[' + locationIndex + '][lng]" value="' + $('<span>').text(lng).html() + '" class="hozio-input location-lng" placeholder="<?php echo esc_js(__('Longitude', 'hozio-image-optimizer')); ?>">' +
                             '</div>' +
+                            '<button type="button" class="hozio-btn hozio-btn-secondary hz-view-loc-btn" data-lat="'+lat+'" data-lng="'+lng+'" title="<?php echo esc_js(__('Preview on map', 'hozio-image-optimizer')); ?>"><span class="dashicons dashicons-location"></span></button>' +
                             '<button type="button" class="hozio-btn hozio-btn-danger remove-location"><span class="dashicons dashicons-trash"></span></button>' +
+                            '<div class="hz-loc-map hz-row-map" hidden></div>' +
                             '</div>';
 
                         $('#custom-locations-list').append(html);
                         locationIndex++;
-
-                        // Clear inputs
                         $('#new-location-name, #new-location-lat, #new-location-lng').val('');
+                        $('#hz-loc-search').val('');
+                        $('#hz-new-loc-map').attr('hidden', true).empty();
+                        $('#add-custom-location, #hz-preview-new-loc').prop('disabled', true);
                     });
 
-                    // Remove location
-                    $(document).on('click', '.remove-location', function() {
-                        $(this).closest('.custom-location-row').remove();
+                    /* ---- Location search autocomplete ---- */
+                    var searchTimer, lastQuery = '';
+                    $('#hz-loc-search').on('input', function() {
+                        var q = $(this).val().trim();
+                        clearTimeout(searchTimer);
+                        if (q.length < 2) {
+                            $('#hz-loc-dropdown').attr('hidden', true).empty();
+                            lastQuery = '';
+                            return;
+                        }
+                        if (q === lastQuery) { return; }
+                        lastQuery = q;
+                        $('#hz-loc-spinner').removeAttr('hidden');
+                        searchTimer = setTimeout(function() {
+                            $.post(ajaxurl, {
+                                action: 'hozio_search_locations',
+                                nonce: hozioImageOptimizer.nonce,
+                                query: q
+                            }, function(res) {
+                                $('#hz-loc-spinner').attr('hidden', true);
+                                var $dd = $('#hz-loc-dropdown');
+                                if (!res.success || !res.data.locations || !res.data.locations.length) {
+                                    $dd.attr('hidden', true).empty();
+                                    return;
+                                }
+                                var html = '';
+                                res.data.locations.forEach(function(loc, i) {
+                                    html += '<div class="hz-loc-item" data-i="'+i+'" data-name="'+$('<span>').text(loc.name).html()+'" data-lat="'+loc.lat+'" data-lng="'+loc.lng+'">' +
+                                        '<span class="dashicons dashicons-location"></span>' +
+                                        '<span>'+$('<span>').text(loc.name).html()+'</span>' +
+                                        '</div>';
+                                });
+                                $dd.html(html).removeAttr('hidden');
+                            }).fail(function() {
+                                $('#hz-loc-spinner').attr('hidden', true);
+                            });
+                        }, 300);
+                    });
+
+                    /* Select from dropdown */
+                    $(document).on('click', '.hz-loc-item', function() {
+                        var $item = $(this);
+                        $('#new-location-name').val($item.data('name'));
+                        $('#new-location-lat').val($item.data('lat'));
+                        $('#new-location-lng').val($item.data('lng'));
+                        $('#hz-loc-search').val($item.data('name'));
+                        $('#hz-loc-dropdown').attr('hidden', true);
+                        checkNewLocReady();
+                    });
+
+                    /* Close dropdown on outside click */
+                    $(document).on('click', function(e) {
+                        if (!$(e.target).closest('.hz-loc-search-wrap').length) {
+                            $('#hz-loc-dropdown').attr('hidden', true);
+                        }
+                    });
+
+                    /* Enable/disable Add + Preview buttons when coords are filled */
+                    function checkNewLocReady() {
+                        var lat = $('#new-location-lat').val().trim();
+                        var lng = $('#new-location-lng').val().trim();
+                        var name = $('#new-location-name').val().trim();
+                        var hasCoords = lat && lng && !isNaN(parseFloat(lat)) && !isNaN(parseFloat(lng));
+                        $('#hz-preview-new-loc').prop('disabled', !hasCoords);
+                        $('#add-custom-location').prop('disabled', !(name && hasCoords));
+                    }
+                    $('#new-location-name, #new-location-lat, #new-location-lng').on('input', checkNewLocReady);
+
+                    /* Preview new location on map */
+                    $('#hz-preview-new-loc').on('click', function() {
+                        var lat = $('#new-location-lat').val().trim();
+                        var lng = $('#new-location-lng').val().trim();
+                        var name = $('#new-location-name').val().trim();
+                        if (!lat || !lng) { return; }
+                        var $map = $('#hz-new-loc-map');
+                        $map.html(buildMapHtml(lat, lng, name)).removeAttr('hidden');
                     });
                 });
                 </script>
@@ -2375,38 +2474,53 @@ jQuery(function($) {
     // Test geocoding button
     $('#test-geocode-btn').on('click', function() {
         var btn = $(this);
-        var location = $('#test-geocode-location').val();
-        var result = $('#geocode-result');
+        var loc = $('#test-geocode-location').val().trim();
+        var $msg = $('#geocode-result');
+        var $map = $('#geocode-map');
 
-        if (!location) {
-            result.show().html('<span class="error"><?php echo esc_js(__('Please enter a location', 'hozio-image-optimizer')); ?></span>');
+        if (!loc) {
+            $msg.removeAttr('hidden').removeClass('hz-msg-ok hz-msg-err').addClass('hz-msg-err')
+                .text('<?php echo esc_js(__('Please enter a location.', 'hozio-image-optimizer')); ?>');
             return;
         }
 
         btn.prop('disabled', true).find('.dashicons').addClass('spin');
-        result.show().html('<span class="loading"><?php echo esc_js(__('Geocoding...', 'hozio-image-optimizer')); ?></span>');
+        $msg.removeAttr('hidden').removeClass('hz-msg-ok hz-msg-err')
+            .text('<?php echo esc_js(__('Geocoding…', 'hozio-image-optimizer')); ?>');
+        $map.attr('hidden', true).empty();
 
         $.post(ajaxurl, {
             action: 'hozio_test_geocoding',
             nonce: hozioImageOptimizer.nonce,
-            location: location
+            location: loc
         }, function(response) {
             btn.prop('disabled', false).find('.dashicons').removeClass('spin');
-
             if (response.success) {
-                result.html(
-                    '<div class="geocode-success" style="background: #d4edda; padding: 10px; border-radius: 4px;">' +
-                    '<strong><?php echo esc_js(__('Success!', 'hozio-image-optimizer')); ?></strong><br>' +
-                    '<span class="dashicons dashicons-location" style="color: #28a745;"></span> ' +
-                    '<?php echo esc_js(__('Latitude:', 'hozio-image-optimizer')); ?> ' + response.data.latitude + '<br>' +
-                    '<span class="dashicons dashicons-location" style="color: #28a745;"></span> ' +
-                    '<?php echo esc_js(__('Longitude:', 'hozio-image-optimizer')); ?> ' + response.data.longitude + '<br>' +
-                    '<small>' + response.data.display_name + '</small>' +
-                    '</div>'
-                );
+                var lat = parseFloat(response.data.latitude);
+                var lng = parseFloat(response.data.longitude);
+                var name = response.data.display_name || '';
+                var m = 0.018;
+                var bbox = (lng-m)+','+(lat-m)+','+(lng+m)+','+(lat+m);
+                var osmSrc = 'https://www.openstreetmap.org/export/embed.html?bbox='+bbox+'&layer=mapnik&marker='+lat+','+lng;
+                var gmUrl  = 'https://www.google.com/maps?q='+lat+','+lng;
+                $msg.addClass('hz-msg-ok').text('<?php echo esc_js(__('Found!', 'hozio-image-optimizer')); ?> ' + lat.toFixed(6) + ', ' + lng.toFixed(6));
+                $map.html(
+                    '<div class="hz-map-card">' +
+                    '<iframe class="hz-map-frame" src="' + osmSrc + '" allowfullscreen loading="lazy"></iframe>' +
+                    '<div class="hz-map-footer">' +
+                    (name ? '<span class="hz-map-name">' + $('<span>').text(name).html() + '</span>' : '') +
+                    '<span class="hz-map-coords">' + lat.toFixed(6) + ', ' + lng.toFixed(6) + '</span>' +
+                    '<a href="' + gmUrl + '" target="_blank" rel="noopener" class="hz-map-gmaps-link"><span class="dashicons dashicons-external"></span> Google Maps</a>' +
+                    '</div></div>'
+                ).removeAttr('hidden');
             } else {
-                result.html('<span class="error" style="color: #dc3545;"><?php echo esc_js(__('Could not geocode location', 'hozio-image-optimizer')); ?></span>');
+                $msg.addClass('hz-msg-err')
+                    .text('<?php echo esc_js(__('Could not geocode that location. Try a different search term.', 'hozio-image-optimizer')); ?>');
             }
+        }).fail(function() {
+            btn.prop('disabled', false).find('.dashicons').removeClass('spin');
+            $msg.addClass('hz-msg-err')
+                .text('<?php echo esc_js(__('Request failed. Check your connection and try again.', 'hozio-image-optimizer')); ?>');
         });
     });
 });

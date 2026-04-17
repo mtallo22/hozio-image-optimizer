@@ -7997,3 +7997,169 @@ body.toplevel_page_hozio-image-optimizer #wpfooter {
         grid-template-columns: 1fr;
     }
 }
+
+/* ======================================================
+   Geocoding / Custom Locations — settings page
+   ====================================================== */
+
+/* Status message under test field */
+.hz-geocode-msg {
+    font-size: 12px;
+    font-weight: 600;
+    padding: 6px 10px;
+    border-radius: 6px;
+    margin-top: 8px;
+}
+.hz-geocode-msg.hz-msg-ok  { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; }
+.hz-geocode-msg.hz-msg-err { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+
+/* Map card (used in both test + custom locations) */
+.hz-loc-map { margin-top: 10px; }
+.hz-map-card {
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    overflow: hidden;
+    background: #fff;
+}
+.hz-map-frame {
+    display: block;
+    width: 100%;
+    height: 220px;
+    border: none;
+}
+.hz-map-footer {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    background: #f9fafb;
+    border-top: 1px solid #e5e7eb;
+    flex-wrap: wrap;
+}
+.hz-map-name {
+    font-size: 11px;
+    color: #374151;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.hz-map-coords {
+    font-size: 11px;
+    font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+    color: #6b7280;
+    white-space: nowrap;
+}
+.hz-map-gmaps-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #4f46e5;
+    text-decoration: none;
+    white-space: nowrap;
+}
+.hz-map-gmaps-link:hover { color: #4338ca; text-decoration: underline; }
+.hz-map-gmaps-link .dashicons { font-size: 13px; width: 13px; height: 13px; }
+
+/* Custom location row map (spans full row below fields) */
+.custom-location-row {
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.hz-row-map { flex-basis: 100%; }
+
+/* Add New Location section */
+.hz-add-location-section {
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid #e5e7eb;
+}
+.hz-add-loc-heading {
+    margin: 0 0 14px;
+    font-size: 13px;
+    font-weight: 700;
+    color: #1e293b;
+}
+
+/* Search field with icon */
+.hz-loc-search-wrap { position: relative; margin-bottom: 10px; }
+.hz-loc-search-field {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+.hz-loc-search-field .dashicons:first-child {
+    position: absolute;
+    left: 10px;
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+    color: #9ca3af;
+    pointer-events: none;
+    z-index: 1;
+}
+.hz-loc-search-field .hozio-input {
+    padding-left: 34px !important;
+    width: 100%;
+}
+.hz-loc-spinner {
+    position: absolute;
+    right: 10px;
+    font-size: 15px;
+    width: 15px;
+    height: 15px;
+    color: #6366f1;
+}
+
+/* Autocomplete dropdown */
+.hz-loc-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-top: none;
+    border-radius: 0 0 8px 8px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.10);
+    max-height: 220px;
+    overflow-y: auto;
+}
+.hz-loc-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 12px;
+    font-size: 12px;
+    color: #374151;
+    cursor: pointer;
+    border-bottom: 1px solid #f3f4f6;
+    transition: background 0.1s;
+}
+.hz-loc-item:last-child { border-bottom: none; }
+.hz-loc-item:hover { background: #f5f3ff; color: #4f46e5; }
+.hz-loc-item .dashicons { font-size: 14px; width: 14px; height: 14px; color: #6366f1; flex-shrink: 0; }
+
+/* Name + coords row */
+.hz-loc-fields {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-bottom: 8px;
+}
+.hz-loc-name  { flex: 2; min-width: 160px; }
+.hz-loc-coord { flex: 1; min-width: 100px; }
+
+.hz-add-loc-footer {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+}
+.hz-add-loc-footer .hozio-field-hint { margin: 0; }
