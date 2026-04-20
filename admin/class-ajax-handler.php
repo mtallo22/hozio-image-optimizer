@@ -70,6 +70,12 @@ class Hozio_Image_Optimizer_Ajax_Handler {
         add_action('wp_ajax_hozio_toggle_image_protection', array($this, 'toggle_image_protection'));
         add_action('wp_ajax_hozio_get_image_references', array($this, 'get_image_references'));
 
+        // Frontend crawler (ground-truth verification against rendered HTML)
+        add_action('wp_ajax_hozio_crawl_discover', array($this, 'crawl_discover'));
+        add_action('wp_ajax_hozio_crawl_batch', array($this, 'crawl_batch'));
+        add_action('wp_ajax_hozio_verify_unused_candidates', array($this, 'verify_unused_candidates'));
+        add_action('wp_ajax_hozio_verify_single_image', array($this, 'verify_single_image'));
+
         // Broken image detection
         add_action('wp_ajax_hozio_scan_broken_images', array($this, 'scan_broken_images'));
         add_action('wp_ajax_hozio_resolve_broken_image', array($this, 'resolve_broken_image'));
@@ -1827,6 +1833,136 @@ class Hozio_Image_Optimizer_Ajax_Handler {
             'attachment_id' => $attachment_id,
             'references' => $references,
             'count' => count($references),
+        ));
+    }
+
+    /**
+     * Discover the list of public URLs that should be crawled.
+     */
+    public function crawl_discover() {
+        $this->verify_request();
+
+        if (!current_user_can('upload_files')) {
+            wp_send_json_error(array('message' => __('Insufficient permissions', 'hozio-image-optimizer')));
+        }
+
+        @set_time_limit(60);
+        $crawler = new Hozio_Image_Optimizer_Frontend_Crawler();
+        $urls = $crawler->discover_urls();
+
+        wp_send_json_success(array(
+            'urls'  => $urls,
+            'total' => count($urls),
+        ));
+    }
+
+    /**
+     * Crawl a batch of URLs and return all image references found in the HTML.
+     */
+    public function crawl_batch() {
+        $this->verify_request();
+
+        if (!current_user_can('upload_files')) {
+            wp_send_json_error(array('message' => __('Insufficient permissions', 'hozio-image-optimizer')));
+        }
+
+        @set_time_limit(90);
+
+        $urls_json  = isset($_POST['urls']) ? wp_unslash($_POST['urls']) : '[]';
+        $urls       = json_decode($urls_json, true);
+        $offset     = isset($_POST['offset']) ? intval($_POST['offset']) : 0;
+        $batch_size = isset($_POST['batch_size']) ? intval($_POST['batch_size']) : 10;
+
+        if (!is_array($urls)) {
+            wp_send_json_error(array('message' => __('Invalid URL list', 'hozio-image-optimizer')));
+        }
+
+        $crawler = new Hozio_Image_Optimizer_Frontend_Crawler();
+        $result  = $crawler->crawl_batch($urls, $offset, $batch_size);
+
+        $next_offset = $offset + $batch_size;
+        $done        = $next_offset >= count($urls);
+
+        wp_send_json_success(array(
+            'found_urls'      => $result['found_urls'],
+            'found_filenames' => $result['found_filenames'],
+            'errors'          => $result['errors'],
+            'fetched'         => $result['fetched'],
+            'next_offset'     => $next_offset,
+            'done'            => $done,
+            'total_urls'      => count($urls),
+        ));
+    }
+
+    /**
+     * Cross-check DB-flagged unused candidates against the frontend-used set.
+     * Returns the truly-unused subset (safe to delete) and the rescued set
+     * (DB-flagged but found on frontend — should NOT be deleted).
+     */
+    public function verify_unused_candidates() {
+        $this->verify_request();
+
+        if (!current_user_can('upload_files')) {
+            wp_send_json_error(array('message' => __('Insufficient permissions', 'hozio-image-optimizer')));
+        }
+
+        $candidates_json = isset($_POST['candidates']) ? wp_unslash($_POST['candidates']) : '[]';
+        $used_urls_json  = isset($_POST['used_urls']) ? wp_unslash($_POST['used_urls']) : '[]';
+        $used_files_json = isset($_POST['used_filenames']) ? wp_unslash($_POST['used_filenames']) : '[]';
+
+        $candidates     = json_decode($candidates_json, true);
+        $used_urls      = json_decode($used_urls_json, true);
+        $used_filenames = json_decode($used_files_json, true);
+
+        if (!is_array($candidates) || !is_array($used_urls) || !is_array($used_filenames)) {
+            wp_send_json_error(array('message' => __('Invalid input', 'hozio-image-optimizer')));
+        }
+
+        // Build O(1) lookup hashes
+        $urls_lookup  = array_fill_keys($used_urls, true);
+        $files_lookup = array_fill_keys($used_filenames, true);
+
+        $detector = new Hozio_Image_Optimizer_Unused_Detector();
+        $result   = $detector->filter_by_frontend_usage($candidates, $urls_lookup, $files_lookup);
+
+        wp_send_json_success(array(
+            'truly_unused'       => $result['truly_unused'],
+            'rescued'            => $result['rescued'],
+            'truly_unused_count' => count($result['truly_unused']),
+            'rescued_count'      => count($result['rescued']),
+        ));
+    }
+
+    /**
+     * Verify a single attachment's frontend usage by crawling every public page.
+     * This is the ground-truth "is this image used?" check.
+     */
+    public function verify_single_image() {
+        $this->verify_request();
+
+        if (!current_user_can('upload_files')) {
+            wp_send_json_error(array('message' => __('Insufficient permissions', 'hozio-image-optimizer')));
+        }
+
+        @set_time_limit(120);
+
+        $attachment_id = isset($_POST['attachment_id']) ? intval($_POST['attachment_id']) : 0;
+        if (!$attachment_id) {
+            wp_send_json_error(array('message' => __('Invalid attachment ID', 'hozio-image-optimizer')));
+        }
+
+        $crawler = new Hozio_Image_Optimizer_Frontend_Crawler();
+        $result  = $crawler->verify_single_image($attachment_id);
+
+        // Also include DB-reference data for a complete picture
+        $detector   = new Hozio_Image_Optimizer_Unused_Detector();
+        $db_refs    = $detector->get_image_references($attachment_id);
+
+        wp_send_json_success(array(
+            'attachment_id' => $attachment_id,
+            'frontend'      => $result,
+            'db_references' => $db_refs,
+            'db_ref_count'  => count($db_refs),
         ));
     }
 

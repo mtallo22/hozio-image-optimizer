@@ -86,45 +86,27 @@ class Hozio_Image_Optimizer_Unused_Detector {
      * @return array Progress/result data.
      */
     public function scan_batch($batch_offset = 0, $batch_size = 300) {
-        $user_id  = get_current_user_id();
-        $ids_key  = 'hozio_scan_ids_'  . $user_id;
-        $data_key = 'hozio_scan_data_' . $user_id;
+        // Stateless batching: every request re-queries everything from scratch.
+        // This eliminates cross-request state (transients, object cache) that
+        // caused inconsistent results between scans on hosts with persistent
+        // object caches.
+        $all_ids = $this->get_all_attachment_ids();
+        $total_ids = count($all_ids);
 
-        if ($batch_offset === 0) {
-            // Wipe any stale transients from a previous aborted scan before starting fresh.
-            $this->clear_scan_data($user_id);
-
-            $all_ids = array_values(array_unique((new WP_Query(array(
-                'post_type'        => 'attachment',
-                'post_mime_type'   => array('image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/avif'),
-                'post_status'      => 'inherit',
-                'posts_per_page'   => -1,
-                'fields'           => 'ids',
-                'suppress_filters' => true,
-            )))->posts));
-
-            set_transient($ids_key, $all_ids, HOUR_IN_SECONDS);
-
-            $ids_cache = $this->preload_id_maps($all_ids);
-            set_transient($data_key, $ids_cache, HOUR_IN_SECONDS);
-        } else {
-            $all_ids   = get_transient($ids_key);
-            $ids_cache = get_transient($data_key);
-            if ($all_ids === false || $ids_cache === false) {
-                return array('error' => __('Scan session expired — please restart the scan.', 'hozio-image-optimizer'));
-            }
+        if ($total_ids === 0) {
+            return array(
+                'done'         => true,
+                'total_ids'    => 0,
+                'scanned'      => 0,
+                'next_offset'  => 0,
+                'batch_unused' => array(),
+            );
         }
 
-        // Reload URL blobs fresh from DB every batch — avoids transient size/corruption issues
-        // that caused inconsistent results when blobs were cached across requests.
+        $ids_cache   = $this->preload_id_maps($all_ids);
         $blobs_cache = $this->load_url_blobs();
-
-        $total_ids   = count($all_ids);
         $batch       = array_slice($all_ids, $batch_offset, $batch_size);
 
-        // Accumulation happens client-side in JS — PHP returns only this batch's results.
-        // This eliminates the server-side accumulator transient that caused race conditions
-        // on Redis/Memcached hosts, producing different counts on consecutive scans.
         $batch_unused = array();
         foreach ($batch as $attachment_id) {
             if ($this->is_image_unused_fast($attachment_id, $ids_cache, $blobs_cache)) {
@@ -135,16 +117,59 @@ class Hozio_Image_Optimizer_Unused_Detector {
         $next_offset = $batch_offset + count($batch);
         $done        = $next_offset >= $total_ids;
 
-        if ($done) {
-            $this->clear_scan_data($user_id);
-        }
-
         return array(
             'done'         => $done,
             'total_ids'    => $total_ids,
             'scanned'      => $next_offset,
             'next_offset'  => $next_offset,
             'batch_unused' => $batch_unused,
+        );
+    }
+
+    /**
+     * Get all image attachment IDs via direct DB query (bypasses all filters).
+     * ORDER BY ID ASC guarantees deterministic ordering across batches.
+     *
+     * @return int[]
+     */
+    private function get_all_attachment_ids() {
+        $ids = $this->wpdb->get_col(
+            "SELECT ID FROM {$this->wpdb->posts}
+             WHERE post_type = 'attachment'
+             AND post_mime_type IN ('image/jpeg','image/png','image/gif','image/webp','image/avif')
+             AND post_status = 'inherit'
+             ORDER BY ID ASC"
+        );
+        return array_map('intval', $ids);
+    }
+
+    /**
+     * Filter a list of DB-candidate unused images by checking them against a
+     * frontend-used URL/filename lookup set. Returns only images that do NOT
+     * appear anywhere in the crawled frontend HTML.
+     *
+     * @param array $db_candidates  Image data arrays from scan_batch.
+     * @param array $used_urls      Hash: url => true.
+     * @param array $used_filenames Hash: normalized filename => true.
+     * @return array {truly_unused, rescued} — rescued are images DB-flagged but
+     *               found on frontend (kept for display/logging).
+     */
+    public function filter_by_frontend_usage(array $db_candidates, array $used_urls, array $used_filenames) {
+        $crawler = new Hozio_Image_Optimizer_Frontend_Crawler();
+        $truly_unused = array();
+        $rescued      = array();
+
+        foreach ($db_candidates as $img) {
+            if ($crawler->attachment_is_used((int) $img['id'], $used_urls, $used_filenames)) {
+                $rescued[] = $img;
+            } else {
+                $truly_unused[] = $img;
+            }
+        }
+
+        return array(
+            'truly_unused' => $truly_unused,
+            'rescued'      => $rescued,
         );
     }
 
@@ -399,16 +424,6 @@ class Hozio_Image_Optimizer_Unused_Detector {
         }
 
         return true;
-    }
-
-    /**
-     * Delete all transients created during a batched scan.
-     *
-     * @param int $user_id
-     */
-    private function clear_scan_data($user_id) {
-        delete_transient('hozio_scan_ids_'  . $user_id);
-        delete_transient('hozio_scan_data_' . $user_id);
     }
 
     /**
