@@ -29,7 +29,10 @@
             state: null,
             pollInterval: null,
             sessionId: null,        // Unique ID for this optimization session
-            completionShown: false  // Whether we've shown the completion modal for this session
+            completionShown: false, // Whether we've shown the completion modal for this session
+            queuedIds: [],          // All IDs submitted to the current queue
+            completedIds: {},       // Hash map of IDs that have finished {id: true}
+            currentId: null         // ID of the image currently being processed
         },
 
         // Initialize
@@ -787,6 +790,7 @@
             var html = this.generateImageCardsHTML(this.allImages);
             grid.html(html);
             this.restoreSelectionState();
+            this.reapplyQueueClasses();
         },
 
         // Append new images to existing grid
@@ -796,6 +800,34 @@
             $('#load-more-wrap').remove();
             grid.append(html);
             this.restoreSelectionState();
+            this.reapplyQueueClasses();
+        },
+
+        // Re-stamp queue status classes onto cards after any DOM re-render.
+        // Called by renderImages() and appendImages() so loading more images
+        // never wipes out the processing/queued/completed indicators.
+        reapplyQueueClasses: function() {
+            if (!this.backgroundQueue.active || this.backgroundQueue.state !== 'running') return;
+
+            var currentId    = this.backgroundQueue.currentId ? this.backgroundQueue.currentId.toString() : null;
+            var completedIds = this.backgroundQueue.completedIds || {};
+            var checkSvg     = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+
+            this.backgroundQueue.queuedIds.forEach(function(id) {
+                var idStr = id.toString();
+                var $card = $('.hozio-image-card[data-id="' + idStr + '"]');
+                if (!$card.length) return;
+
+                if (completedIds[idStr]) {
+                    $card.removeClass('bg-processing bg-queued bg-paused').addClass('completed optimized');
+                    $card.find('.card-status-badge').removeClass('not-optimized').addClass('optimized').html(checkSvg);
+                    $card.find('.card-process-status').removeClass('pending').addClass('done').html(checkSvg + ' Optimized');
+                } else if (idStr === currentId) {
+                    $card.removeClass('bg-queued bg-paused').addClass('bg-processing');
+                } else {
+                    $card.removeClass('bg-processing bg-paused').addClass('bg-queued');
+                }
+            });
         },
 
         // Generate HTML for image cards
@@ -1838,6 +1870,11 @@
                         bytes_saved_formatted: '0 B'
                     });
 
+                    // Store queued IDs so reapplyQueueClasses() can restore status after DOM re-renders
+                    self.backgroundQueue.queuedIds    = self.selectedImages.slice();
+                    self.backgroundQueue.completedIds = {};
+                    self.backgroundQueue.currentId    = self.selectedImages.length ? self.selectedImages[0].toString() : null;
+
                     // Mark ALL selected cards as "queued" for visual feedback, first one as "processing"
                     self.selectedImages.forEach(function(id, index) {
                         var $card = $('.hozio-image-card[data-id="' + id + '"]');
@@ -2126,6 +2163,8 @@
                         $(this).find('.card-process-status').removeClass('pending').addClass('done').html(checkSvg + ' Optimized');
                         var $c = $(this);
                         setTimeout(function() { $c.removeClass('just-completed'); }, 700);
+                        // Keep completedIds in sync so reapplyQueueClasses() stays accurate
+                        self.backgroundQueue.completedIds[cardId] = true;
                     }
                 });
 
@@ -2135,11 +2174,16 @@
                     $currentCard.removeClass('bg-queued bg-paused').addClass('bg-processing');
                 }
 
+                // Track current ID so reapplyQueueClasses() knows what's processing
+                self.backgroundQueue.currentId = currentId;
                 this.backgroundQueue.lastSeenImageId = currentId;
             } else if (data.state === 'paused') {
                 $('.hozio-image-card.bg-processing').removeClass('bg-processing').addClass('bg-paused');
             } else if (data.state === 'completed' || data.state === 'cancelled') {
                 $('.hozio-image-card').removeClass('bg-processing bg-queued bg-paused');
+                self.backgroundQueue.queuedIds    = [];
+                self.backgroundQueue.completedIds = {};
+                self.backgroundQueue.currentId    = null;
             }
 
             // Update filename if it changed (AI rename)
