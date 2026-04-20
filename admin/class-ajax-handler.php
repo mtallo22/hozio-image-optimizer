@@ -1852,11 +1852,13 @@ class Hozio_Image_Optimizer_Ajax_Handler {
 
         @set_time_limit(60);
         $crawler = new Hozio_Image_Optimizer_Frontend_Crawler();
-        $urls = $crawler->discover_urls();
+        $result  = $crawler->discover_urls_detailed();
 
         wp_send_json_success(array(
-            'urls'  => $urls,
-            'total' => count($urls),
+            'urls'                => $result['urls'],
+            'total'               => count($result['urls']),
+            'total_before_filter' => $result['total_before_filter'],
+            'filtered_out'        => $result['filtered_out'],
         ));
     }
 

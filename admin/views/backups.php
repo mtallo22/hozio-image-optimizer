@@ -937,50 +937,94 @@ jQuery(document).ready(function($) {
             $.post(ajaxurl, { action: 'hozio_crawl_discover', nonce: hozioImageOptimizer.nonce }, function(response) {
                 if (!response.success) { abort(response.data && response.data.message); return; }
                 frontendUrls = response.data.urls || [];
+                var filteredOut = response.data.filtered_out || 0;
                 if (!frontendUrls.length) {
-                    // No pages to crawl — just run the DB scan without crawl data
                     runFinalScan();
                     return;
                 }
-                setProgress(10, '<?php echo esc_js(__('Crawling pages…', 'hozio-image-optimizer')); ?> 0 / ' + frontendUrls.length);
-                crawlBatch(0);
+                var extra = filteredOut > 0 ? ' (' + filteredOut + ' noise URLs skipped)' : '';
+                setProgress(10, '<?php echo esc_js(__('Crawling pages…', 'hozio-image-optimizer')); ?> 0 / ' + frontendUrls.length + extra);
+                crawlAllParallel();
             }).fail(function() { abort(); });
         }
 
-        function crawlBatch(offset) {
-            $.post(ajaxurl, {
-                action:     'hozio_crawl_batch',
-                nonce:      hozioImageOptimizer.nonce,
-                urls:       JSON.stringify(frontendUrls),
-                offset:     offset,
-                batch_size: 30
-            }, function(response) {
-                if (!response.success) { abort(response.data && response.data.message); return; }
-                var data = response.data;
-                (data.found_urls || []).forEach(function(u) { usedUrlSet[u] = true; });
-                (data.found_filenames || []).forEach(function(f) { usedFilenameSet[f] = true; });
-                if (data.errors && data.errors.length) crawlErrors = crawlErrors.concat(data.errors);
+        // Parallel crawl — run up to CONCURRENCY batches at once from the browser.
+        // Combined with curl_multi on the server (30/batch), this yields ~90
+        // simultaneous HTTP fetches in flight. For a 400-page site that's
+        // ~4-5 rounds of ~2s each = ~10 seconds instead of several minutes.
+        function crawlAllParallel() {
+            var BATCH_SIZE  = 30;
+            var CONCURRENCY = 3;
+            var total       = frontendUrls.length;
+            var nextOffset  = 0;
+            var inFlight    = 0;
+            var completed   = 0;
+            var pagesDone   = 0;
+            var aborted     = false;
+            var totalBatches = Math.ceil(total / BATCH_SIZE);
 
-                var crawlPct = Math.min(Math.round((data.next_offset / frontendUrls.length) * 85), 85);
-                setProgress(10 + crawlPct, '<?php echo esc_js(__('Crawling pages…', 'hozio-image-optimizer')); ?> ' + Math.min(data.next_offset, frontendUrls.length) + ' / ' + frontendUrls.length);
+            function launchNext() {
+                if (aborted) return;
+                if (nextOffset >= total) return;
 
-                if (!data.done) { crawlBatch(data.next_offset); return; }
+                var myOffset = nextOffset;
+                nextOffset += BATCH_SIZE;
+                inFlight++;
 
-                // Persist to cache for future scans
-                setProgress(92, '<?php echo esc_js(__('Saving cache…', 'hozio-image-optimizer')); ?>');
                 $.post(ajaxurl, {
-                    action:          'hozio_crawl_cache_finalize',
-                    nonce:           hozioImageOptimizer.nonce,
-                    used_urls:       JSON.stringify(Object.keys(usedUrlSet)),
-                    used_filenames:  JSON.stringify(Object.keys(usedFilenameSet)),
-                    pages_crawled:   frontendUrls.length
-                }, function() {
-                    runFinalScan();
+                    action:     'hozio_crawl_batch',
+                    nonce:      hozioImageOptimizer.nonce,
+                    urls:       JSON.stringify(frontendUrls),
+                    offset:     myOffset,
+                    batch_size: BATCH_SIZE
+                }).done(function(response) {
+                    inFlight--;
+                    if (aborted) return;
+                    if (!response || !response.success) {
+                        aborted = true;
+                        abort(response && response.data && response.data.message);
+                        return;
+                    }
+                    var data = response.data;
+                    (data.found_urls || []).forEach(function(u) { usedUrlSet[u] = true; });
+                    (data.found_filenames || []).forEach(function(f) { usedFilenameSet[f] = true; });
+                    if (data.errors && data.errors.length) crawlErrors = crawlErrors.concat(data.errors);
+
+                    completed++;
+                    pagesDone = Math.min(pagesDone + BATCH_SIZE, total);
+                    var crawlPct = Math.min(Math.round((pagesDone / total) * 85), 85);
+                    setProgress(10 + crawlPct, '<?php echo esc_js(__('Crawling pages…', 'hozio-image-optimizer')); ?> ' + pagesDone + ' / ' + total);
+
+                    if (completed >= totalBatches) {
+                        saveCacheAndScan();
+                    } else {
+                        launchNext();
+                    }
                 }).fail(function() {
-                    // Even if caching fails, run the scan with the data we have
-                    runFinalScan();
+                    inFlight--;
+                    if (aborted) return;
+                    aborted = true;
+                    abort();
                 });
-            }).fail(function() { abort(); });
+            }
+
+            // Kick off initial parallel streams
+            for (var i = 0; i < CONCURRENCY && nextOffset < total; i++) {
+                launchNext();
+            }
+        }
+
+        function saveCacheAndScan() {
+            setProgress(92, '<?php echo esc_js(__('Saving cache…', 'hozio-image-optimizer')); ?>');
+            $.post(ajaxurl, {
+                action:          'hozio_crawl_cache_finalize',
+                nonce:           hozioImageOptimizer.nonce,
+                used_urls:       JSON.stringify(Object.keys(usedUrlSet)),
+                used_filenames:  JSON.stringify(Object.keys(usedFilenameSet)),
+                pages_crawled:   frontendUrls.length
+            }).always(function() {
+                runFinalScan();
+            });
         }
 
         // ---- Final scan (one request, deterministic) ----

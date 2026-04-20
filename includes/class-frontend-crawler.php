@@ -86,28 +86,75 @@ class Hozio_Image_Optimizer_Frontend_Crawler {
      * @return array Deduplicated list of absolute URLs.
      */
     public function discover_urls() {
+        $result = $this->discover_urls_detailed();
+        return $result['urls'];
+    }
+
+    /**
+     * Same as discover_urls() but also returns counts for UI feedback.
+     *
+     * @return array {urls, total_before_filter, filtered_out}
+     */
+    public function discover_urls_detailed() {
         $urls = array();
         $home = home_url('/');
-
-        // Always include the homepage and common archive URLs
         $urls[] = $home;
 
-        // Try sitemaps first — fastest path if the site has one
         $sitemap_urls = $this->parse_sitemaps();
         if (!empty($sitemap_urls)) {
             $urls = array_merge($urls, $sitemap_urls);
         } else {
-            // Fallback: build URLs from DB
             $urls = array_merge($urls, $this->discover_from_db());
         }
 
-        // Always include term archives even if sitemaps were used — some plugins
-        // omit category/tag pages from sitemaps but they often render images.
         $urls = array_merge($urls, $this->get_term_archive_urls());
-
-        // Dedupe and return
         $urls = array_values(array_unique(array_filter($urls)));
-        return $urls;
+        $raw_count = count($urls);
+
+        // Aggressive noise filter — these URL patterns either duplicate content
+        // already crawled elsewhere (pagination, author archives) or contain no
+        // crawlable HTML (feeds, embeds). Filtering them out is lossless for
+        // image-reference detection.
+        $filtered = $this->filter_noisy_urls($urls);
+
+        return array(
+            'urls'                => $filtered,
+            'total_before_filter' => $raw_count,
+            'filtered_out'        => $raw_count - count($filtered),
+        );
+    }
+
+    /**
+     * Strip URL patterns that would be redundant or empty to crawl.
+     *
+     * @param string[] $urls
+     * @return string[]
+     */
+    private function filter_noisy_urls(array $urls) {
+        $noise_patterns = array(
+            '#/page/\d+/?(\?|$)#',             // /page/2/, /page/3/, ... — duplicate archive pagination
+            '#/attachment/[^/?]+/?(\?|$)#',   // /attachment/{slug}/ — single-image pages, nothing extra
+            '#/author/[^/?]+/?(\?|$)#',       // /author/{slug}/ — duplicate of posts already crawled
+            '#/feed/?(\?|$)#',                // /feed/ — XML, not HTML
+            '#/comments/feed/?(\?|$)#',       // /comments/feed/
+            '#/feed/atom/?(\?|$)#',           // /feed/atom/
+            '#/feed/rss2?/?(\?|$)#',          // /feed/rss/ and /feed/rss2/
+            '#/trackback/?(\?|$)#',           // WordPress trackbacks
+            '#/embed/?(\?|$)#',               // oEmbed endpoints
+            '#/amp/?(\?|$)#',                 // AMP pages duplicate post HTML
+            '#\?replytocom=#',                // comment reply anchor duplicates
+            '#\.xml$#',                        // any stray xml files that slipped through
+        );
+
+        $keep = array();
+        foreach ($urls as $url) {
+            $skip = false;
+            foreach ($noise_patterns as $pat) {
+                if (preg_match($pat, $url)) { $skip = true; break; }
+            }
+            if (!$skip) $keep[] = $url;
+        }
+        return $keep;
     }
 
     /**
