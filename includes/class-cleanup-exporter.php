@@ -338,7 +338,7 @@ class Hozio_Image_Optimizer_Cleanup_Exporter {
      * @param int    $batch_size Images to process in this request.
      * @return array|WP_Error
      */
-    public function restore_session_batch($token, $offset, $batch_size = 20) {
+    public function restore_session_batch($token, $offset, $batch_size = 5) {
         $session = get_transient($token);
         if (!$session) {
             return new WP_Error('session_expired', __('Restore session expired — please re-upload the ZIP.', 'hozio-image-optimizer'));
@@ -458,7 +458,12 @@ class Hozio_Image_Optimizer_Cleanup_Exporter {
         $title = pathinfo($orig_name, PATHINFO_FILENAME);
         $guid  = $upload_dir['baseurl'] . '/' . ltrim($rel_path, '/');
 
+        // Try to preserve the original attachment ID. wp_insert_post (which
+        // wp_insert_attachment calls under the hood) honors `import_id` iff
+        // no post currently occupies that ID. When the slot is free, every
+        // existing DB/theme/cache reference keeps working with zero rewrites.
         $new_id = wp_insert_attachment(array(
+            'import_id'      => $old_id,
             'post_title'     => $title,
             'post_mime_type' => $image_check['mime'],
             'post_status'    => 'inherit',
@@ -470,6 +475,8 @@ class Hozio_Image_Optimizer_Cleanup_Exporter {
             return array('error' => true, 'id' => $old_id, 'filename' => $zip_filename, 'reason' => $new_id->get_error_message());
         }
 
+        $id_preserved = ((int) $new_id === (int) $old_id);
+
         update_post_meta($new_id, '_wp_attached_file', $rel_path);
 
         $attach_meta = wp_generate_attachment_metadata($new_id, $target_path);
@@ -479,15 +486,18 @@ class Hozio_Image_Optimizer_Cleanup_Exporter {
             update_post_meta($new_id, '_wp_attachment_image_alt', sanitize_text_field($image_info['alt_text']));
         }
 
-        if ($old_id !== $new_id) {
+        // Only rewrite DB references when the original ID couldn't be reclaimed.
+        if (!$id_preserved) {
             $this->update_id_references($old_id, $new_id);
         }
 
         return array(
-            'original_id' => $old_id,
-            'new_id'      => $new_id,
-            'filename'    => $target_name,
-            'url'         => $guid,
+            'original_id'  => $old_id,
+            'new_id'       => (int) $new_id,
+            'filename'     => $target_name,
+            'url'          => wp_get_attachment_url($new_id),
+            'thumbnail'    => wp_get_attachment_image_url($new_id, 'thumbnail'),
+            'id_preserved' => $id_preserved,
         );
     }
 

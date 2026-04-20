@@ -369,6 +369,12 @@ if (class_exists('Hozio_Image_Optimizer_Broken_Detector')) {
                             <div class="scan-progress-bar" id="unused-scan-progress-fill"></div>
                         </div>
                         <div class="scan-progress-label" id="unused-scan-progress-label"><?php esc_html_e('Starting scan…', 'hozio-image-optimizer'); ?></div>
+                        <div style="margin-top:16px;">
+                            <button type="button" class="hozio-btn hozio-btn-outline btn-sm" id="stop-scan-btn">
+                                <span class="dashicons dashicons-no-alt"></span>
+                                <?php esc_html_e('Stop', 'hozio-image-optimizer'); ?>
+                            </button>
+                        </div>
                     </div>
 
                     <!-- No Unused Images State -->
@@ -882,9 +888,14 @@ jQuery(document).ready(function($) {
         var btn = $(this);
         var originalHtml = btn.html();
 
+        // Local abort state — any outstanding AJAX that returns after the
+        // user clicks Stop is ignored, and no new batches are launched.
+        var scanAborted = false;
+
         function resetUI() {
             btn.prop('disabled', false).html(originalHtml);
             $('#unused-scanning-state').hide();
+            $('#stop-scan-btn').prop('disabled', false).html('<span class="dashicons dashicons-no-alt"></span> <?php echo esc_js(__('Stop', 'hozio-image-optimizer')); ?>');
         }
 
         function startUI() {
@@ -908,11 +919,26 @@ jQuery(document).ready(function($) {
             alert(msg || '<?php echo esc_js(__('Error scanning images', 'hozio-image-optimizer')); ?>');
         }
 
+        // Stop button — sets the flag so no further batches are launched.
+        // In-flight requests are allowed to complete; their results are ignored.
+        $('#stop-scan-btn').off('click').on('click', function() {
+            scanAborted = true;
+            $(this).prop('disabled', true).html('<span class="dashicons dashicons-update spin"></span> <?php echo esc_js(__('Stopping…', 'hozio-image-optimizer')); ?>');
+            setProgress(0, '<?php echo esc_js(__('Cancelling…', 'hozio-image-optimizer')); ?>');
+            // Short delay lets any imminent AJAX completion show "aborted" state,
+            // then return the UI to its initial state.
+            setTimeout(function() {
+                resetUI();
+                $('#unused-initial-state').show();
+            }, 400);
+        });
+
         startUI();
         setProgress(5, '<?php echo esc_js(__('Checking crawl cache…', 'hozio-image-optimizer')); ?>');
 
         // Step 1: ask the server if a fresh crawl cache exists
         $.post(ajaxurl, { action: 'hozio_crawl_cache_status', nonce: hozioImageOptimizer.nonce }, function(response) {
+            if (scanAborted) return;
             if (!response.success) { abort(response.data && response.data.message); return; }
 
             if (response.data.has_cache) {
@@ -934,8 +960,10 @@ jQuery(document).ready(function($) {
         var crawlErrors = [];
 
         function discoverUrls() {
+            if (scanAborted) return;
             setProgress(8, '<?php echo esc_js(__('Planning crawl…', 'hozio-image-optimizer')); ?>');
             $.post(ajaxurl, { action: 'hozio_crawl_discover', nonce: hozioImageOptimizer.nonce }, function(response) {
+                if (scanAborted) return;
                 if (!response.success) { abort(response.data && response.data.message); return; }
                 frontendUrls = response.data.urls || [];
                 var filteredOut = response.data.filtered_out || 0;
@@ -944,15 +972,13 @@ jQuery(document).ready(function($) {
                     runFinalScan();
                     return;
                 }
-                // Tell the user exactly what's being crawled and what was skipped,
-                // so the number they see is the number we're actually fetching.
                 var summary = frontendUrls.length + ' <?php echo esc_js(__('pages to crawl', 'hozio-image-optimizer')); ?>';
                 if (filteredOut > 0) {
                     summary += ' (' + filteredOut + ' <?php echo esc_js(__('of', 'hozio-image-optimizer')); ?> ' + rawTotal + ' <?php echo esc_js(__('noise URLs filtered', 'hozio-image-optimizer')); ?>)';
                 }
                 setProgress(10, summary + ' — <?php echo esc_js(__('starting…', 'hozio-image-optimizer')); ?>');
                 crawlAllParallel();
-            }).fail(function() { abort(); });
+            }).fail(function() { if (!scanAborted) abort(); });
         }
 
         // Parallel crawl — 5 browser batches × 40 server curl_multi =
@@ -970,7 +996,7 @@ jQuery(document).ready(function($) {
             var totalBatches = Math.ceil(total / BATCH_SIZE);
 
             function launchNext() {
-                if (aborted) return;
+                if (aborted || scanAborted) return;
                 if (nextOffset >= total) return;
 
                 var myOffset = nextOffset;
@@ -985,7 +1011,7 @@ jQuery(document).ready(function($) {
                     batch_size: BATCH_SIZE
                 }).done(function(response) {
                     inFlight--;
-                    if (aborted) return;
+                    if (aborted || scanAborted) return;
                     if (!response || !response.success) {
                         aborted = true;
                         abort(response && response.data && response.data.message);
@@ -1008,7 +1034,7 @@ jQuery(document).ready(function($) {
                     }
                 }).fail(function() {
                     inFlight--;
-                    if (aborted) return;
+                    if (aborted || scanAborted) return;
                     aborted = true;
                     abort();
                 });
@@ -1021,6 +1047,7 @@ jQuery(document).ready(function($) {
         }
 
         function saveCacheAndScan() {
+            if (scanAborted) return;
             setProgress(92, '<?php echo esc_js(__('Saving cache…', 'hozio-image-optimizer')); ?>');
             $.post(ajaxurl, {
                 action:          'hozio_crawl_cache_finalize',
@@ -1029,18 +1056,20 @@ jQuery(document).ready(function($) {
                 used_filenames:  JSON.stringify(Object.keys(usedFilenameSet)),
                 pages_crawled:   frontendUrls.length
             }).always(function() {
-                runFinalScan();
+                if (!scanAborted) runFinalScan();
             });
         }
 
         // ---- Final scan (one request, deterministic) ----
         function runFinalScan() {
+            if (scanAborted) return;
             setProgress(95, '<?php echo esc_js(__('Finalizing scan…', 'hozio-image-optimizer')); ?>');
             $.post(ajaxurl, {
                 action:    'hozio_scan_final',
                 nonce:     hozioImageOptimizer.nonce,
                 use_crawl: 1
             }, function(response) {
+                if (scanAborted) return;
                 if (!response.success) { abort(response.data && response.data.message); return; }
 
                 var data = response.data;
@@ -1075,17 +1104,28 @@ jQuery(document).ready(function($) {
         }
     });
 
-    // "Refresh crawl cache" — force the next scan to re-crawl
-    $(document).on('click', '#refresh-crawl-cache-btn', function() {
-        if (!confirm('<?php echo esc_js(__('Clear the cached frontend crawl? The next scan will re-crawl your site (slower, but picks up any new pages/images).', 'hozio-image-optimizer')); ?>')) {
-            return;
-        }
-        var $btn = $(this);
-        $btn.prop('disabled', true);
-        $.post(ajaxurl, { action: 'hozio_crawl_cache_clear', nonce: hozioImageOptimizer.nonce }, function() {
-            $btn.prop('disabled', false);
-            updateCrawlCacheBadge();
-            alert('<?php echo esc_js(__('Cache cleared. The next scan will crawl fresh.', 'hozio-image-optimizer')); ?>');
+    // "Refresh crawl cache" — explicit opt-in to re-run the full crawl.
+    // Fetches current page count first so the confirm dialog can tell the
+    // user exactly what they're triggering.
+    $(document).on('click', '#refresh-crawl-cache-btn', function(e) {
+        e.preventDefault();
+        $.post(ajaxurl, { action: 'hozio_crawl_cache_status', nonce: hozioImageOptimizer.nonce }, function(resp) {
+            var pages = (resp.success && resp.data && resp.data.pages_crawled) ? resp.data.pages_crawled : 0;
+            var msg = '<?php echo esc_js(__('Clear the frontend-crawl cache?', 'hozio-image-optimizer')); ?>\n\n';
+            if (pages > 0) {
+                // Rough estimate: ~25 pages/sec with parallelism on a typical host.
+                var estSec = Math.max(15, Math.round(pages / 25));
+                msg += '<?php echo esc_js(__('The next scan will re-crawl', 'hozio-image-optimizer')); ?> ' + pages + ' <?php echo esc_js(__('pages. Typically takes about', 'hozio-image-optimizer')); ?> ' + estSec + ' <?php echo esc_js(__('seconds and briefly uses extra server resources.', 'hozio-image-optimizer')); ?>\n\n';
+            } else {
+                msg += '<?php echo esc_js(__('The next scan will crawl your site fresh.', 'hozio-image-optimizer')); ?>\n\n';
+            }
+            msg += '<?php echo esc_js(__('Only refresh if you have added new pages or images since the last crawl.', 'hozio-image-optimizer')); ?>';
+
+            if (!confirm(msg)) return;
+            $.post(ajaxurl, { action: 'hozio_crawl_cache_clear', nonce: hozioImageOptimizer.nonce }, function() {
+                updateCrawlCacheBadge();
+                alert('<?php echo esc_js(__('Cache cleared. The next scan will crawl your site fresh.', 'hozio-image-optimizer')); ?>');
+            });
         });
     });
 
@@ -1431,6 +1471,8 @@ jQuery(document).ready(function($) {
         var originalHtml = btn.html();
         var totalRestored = 0;
         var totalFailed   = 0;
+        var allRestored   = []; // all restored items across batches (for modal)
+        var allFailed     = []; // all failed items across batches (for modal)
 
         btn.html('<span class="dashicons dashicons-update spin"></span> <?php echo esc_js(__('Uploading…', 'hozio-image-optimizer')); ?>').prop('disabled', true);
         $('#restore-progress-wrap').show();
@@ -1457,6 +1499,7 @@ jQuery(document).ready(function($) {
                 var token = response.data.token;
                 var total = response.data.total;
                 btn.html('<span class="dashicons dashicons-update spin"></span> <?php echo esc_js(__('Restoring…', 'hozio-image-optimizer')); ?>');
+                $('#restore-progress-label').text('<?php echo esc_js(__('Restoring…', 'hozio-image-optimizer')); ?> 0 / ' + total);
                 restoreBatch(token, 0, total);
             },
             error: function() {
@@ -1467,14 +1510,14 @@ jQuery(document).ready(function($) {
             }
         });
 
-        // Phase 2: process batches of 20
+        // Phase 2: process batches (server default is 5 — progress updates every few seconds)
         function restoreBatch(token, offset, total) {
             $.post(ajaxurl, {
                 action:     'hozio_restore_zip_batch',
                 nonce:      hozioImageOptimizer.nonce,
                 token:      token,
                 offset:     offset,
-                batch_size: 20
+                batch_size: 5
             }, function(response) {
                 if (!response.success) {
                     btn.html(originalHtml).prop('disabled', false);
@@ -1487,19 +1530,28 @@ jQuery(document).ready(function($) {
                 var data = response.data;
                 totalRestored += data.restored_count;
                 totalFailed   += data.failed_count;
+                if (data.restored && data.restored.length) allRestored = allRestored.concat(data.restored);
+                if (data.failed && data.failed.length)     allFailed   = allFailed.concat(data.failed);
 
                 var pct = total > 0 ? Math.round((data.next_offset / total) * 100) : 100;
                 $('#restore-progress-bar').css('width', pct + '%');
                 $('#restore-progress-count').text(data.next_offset + ' / ' + total);
 
+                // Show the most recently restored filename + ID status so the
+                // bar visibly moves every few seconds instead of appearing frozen.
+                var last = (data.restored && data.restored.length) ? data.restored[data.restored.length - 1] : null;
+                var labelText = '<?php echo esc_js(__('Restoring…', 'hozio-image-optimizer')); ?> ' + data.next_offset + ' / ' + total;
+                if (last) {
+                    var marker = last.id_preserved ? ' \u2713' : ' \u21BB';
+                    labelText += marker + ' ' + last.filename;
+                }
+                $('#restore-progress-label').text(labelText);
+
                 if (data.done) {
                     btn.html(originalHtml).prop('disabled', false);
                     $('#restore-progress-wrap').hide();
                     $('#restore-zip-input').val('');
-                    var msg = '<?php echo esc_js(__('Restored', 'hozio-image-optimizer')); ?> ' + totalRestored + ' <?php echo esc_js(__('images successfully!', 'hozio-image-optimizer')); ?>';
-                    if (totalFailed > 0) msg += '\n' + totalFailed + ' <?php echo esc_js(__('images could not be restored.', 'hozio-image-optimizer')); ?>';
-                    alert(msg);
-                    location.reload();
+                    showRestoreCompleteModal(allRestored, allFailed);
                 } else {
                     restoreBatch(token, data.next_offset, total);
                 }
@@ -1511,6 +1563,71 @@ jQuery(document).ready(function($) {
             });
         }
     });
+
+    // Post-restore summary modal — shows thumbnails of every restored image,
+    // flags which kept their original attachment ID vs were remapped, and
+    // lists any failures. No forced page reload.
+    function showRestoreCompleteModal(restored, failed) {
+        var preservedCount = 0;
+        restored.forEach(function(r) { if (r.id_preserved) preservedCount++; });
+        var remappedCount = restored.length - preservedCount;
+
+        var summary = '';
+        summary += '<div style="background:#d1fae5;border:1px solid #10b981;color:#065f46;padding:10px 14px;border-radius:6px;margin-bottom:10px;font-weight:600;">';
+        summary += '\u2713 ' + restored.length + ' <?php echo esc_js(__('images restored', 'hozio-image-optimizer')); ?>';
+        summary += '</div>';
+        if (preservedCount > 0) {
+            summary += '<div style="font-size:12px;color:#065f46;margin-bottom:6px;">\u2713 ' + preservedCount + ' <?php echo esc_js(__('kept their original attachment ID (frontend references work immediately)', 'hozio-image-optimizer')); ?></div>';
+        }
+        if (remappedCount > 0) {
+            summary += '<div style="font-size:12px;color:#92400e;margin-bottom:6px;">\u21BB ' + remappedCount + ' <?php echo esc_js(__('got new IDs — database references have been updated', 'hozio-image-optimizer')); ?></div>';
+        }
+        if (failed.length > 0) {
+            summary += '<div style="font-size:12px;color:#991b1b;margin-bottom:6px;">\u26A0 ' + failed.length + ' <?php echo esc_js(__('failed to restore — see browser console for details', 'hozio-image-optimizer')); ?></div>';
+            if (window.console) console.warn('[Hozio] Failed to restore:', failed);
+        }
+
+        var grid = '<div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(110px, 1fr));gap:8px;max-height:320px;overflow:auto;margin-top:12px;">';
+        restored.forEach(function(r) {
+            var border = r.id_preserved ? '#10b981' : '#f59e0b';
+            var badge  = r.id_preserved ? '\u2713' : '\u21BB';
+            var badgeColor = r.id_preserved ? '#10b981' : '#f59e0b';
+            grid += '<div style="border:1px solid ' + border + ';border-radius:6px;padding:4px;text-align:center;position:relative;">';
+            if (r.thumbnail) {
+                grid += '<img src="' + r.thumbnail + '" style="width:100%;height:80px;object-fit:cover;border-radius:4px;display:block;" alt="">';
+            } else {
+                grid += '<div style="width:100%;height:80px;background:#f1f5f9;border-radius:4px;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:11px;"><?php echo esc_js(__('no preview', 'hozio-image-optimizer')); ?></div>';
+            }
+            grid += '<div style="font-size:10px;color:#475569;margin-top:3px;word-break:break-all;line-height:1.2;">' + r.filename + '</div>';
+            grid += '<div style="font-size:9px;color:#94a3b8;">ID ' + r.new_id + '</div>';
+            grid += '<span style="position:absolute;top:4px;right:4px;background:' + badgeColor + ';color:white;border-radius:50%;width:18px;height:18px;display:flex;align-items:center;justify-content:center;font-size:11px;">' + badge + '</span>';
+            grid += '</div>';
+        });
+        grid += '</div>';
+
+        var html =
+            '<div id="hozio-restore-modal" style="position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:100000;display:flex;align-items:center;justify-content:center;">' +
+            '<div style="background:#fff;max-width:800px;width:94%;max-height:88vh;overflow:auto;padding:22px;border-radius:10px;box-shadow:0 20px 50px rgba(0,0,0,0.35);">' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
+            '<h3 style="margin:0;"><?php echo esc_js(__('Restore Complete', 'hozio-image-optimizer')); ?></h3>' +
+            '<button type="button" id="hozio-restore-close" style="background:none;border:none;font-size:24px;cursor:pointer;color:#64748b;">&times;</button>' +
+            '</div>' +
+            summary +
+            (restored.length ? grid : '') +
+            '<div style="text-align:right;margin-top:16px;display:flex;gap:8px;justify-content:flex-end;">' +
+            '<button type="button" class="button" id="hozio-restore-close-btn"><?php echo esc_js(__('Close', 'hozio-image-optimizer')); ?></button>' +
+            '<button type="button" class="button button-primary" id="hozio-restore-reload-btn"><?php echo esc_js(__('Reload page', 'hozio-image-optimizer')); ?></button>' +
+            '</div>' +
+            '</div></div>';
+
+        $('body').append(html);
+        $('#hozio-restore-close, #hozio-restore-close-btn').on('click', function() {
+            $('#hozio-restore-modal').remove();
+        });
+        $('#hozio-restore-reload-btn').on('click', function() {
+            location.reload();
+        });
+    }
 
     // ===== BROKEN IMAGES TAB FUNCTIONALITY =====
 

@@ -1773,7 +1773,7 @@ class Hozio_Image_Optimizer_Ajax_Handler {
 
         $token      = isset($_POST['token'])       ? sanitize_text_field($_POST['token']) : '';
         $offset     = isset($_POST['offset'])      ? intval($_POST['offset'])              : 0;
-        $batch_size = isset($_POST['batch_size'])  ? intval($_POST['batch_size'])          : 20;
+        $batch_size = isset($_POST['batch_size'])  ? intval($_POST['batch_size'])          : 5;
 
         if (!$token) {
             wp_send_json_error(array('message' => __('Missing restore session token', 'hozio-image-optimizer')));
