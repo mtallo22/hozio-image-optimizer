@@ -828,7 +828,7 @@ jQuery(document).ready(function($) {
                 action: 'hozio_scan_unused_images',
                 nonce: hozioImageOptimizer.nonce,
                 batch_offset: offset,
-                batch_size: 50
+                batch_size: 300
             }, function(response) {
                 if (!response.success) {
                     btn.prop('disabled', false).html(originalHtml);

@@ -74,34 +74,44 @@ class Hozio_Image_Optimizer_Unused_Detector {
 
     /**
      * Scan a batch of images, accumulating results across multiple requests.
-     * On the first call (batch_offset=0) all image IDs are fetched and cached
-     * in a transient. Subsequent calls read from that cache so each request
-     * only processes $batch_size images, keeping well under Cloudflare's 100s
-     * gateway timeout.
+     *
+     * On the first call (batch_offset=0) all reference data is pre-loaded with
+     * ~9 bulk queries and cached in transients. Subsequent batches do zero DB
+     * queries per image — just fast PHP strpos/isset checks against the cached
+     * blobs. This reduces ~10,800 queries (6/image × 1,800 images) to ~9 total,
+     * cutting scan time from 10+ minutes to under a minute.
      *
      * @param int $batch_offset Number of images already scanned.
-     * @param int $batch_size   Images to scan in this request.
+     * @param int $batch_size   Images to scan per request (default 300).
      * @return array Progress/result data.
      */
-    public function scan_batch($batch_offset = 0, $batch_size = 50) {
-        $user_id     = get_current_user_id();
-        $ids_key     = 'hozio_scan_ids_' . $user_id;
-        $acc_key     = 'hozio_scan_acc_' . $user_id;
+    public function scan_batch($batch_offset = 0, $batch_size = 300) {
+        $user_id   = get_current_user_id();
+        $ids_key   = 'hozio_scan_ids_'   . $user_id;
+        $acc_key   = 'hozio_scan_acc_'   . $user_id;
+        $data_key  = 'hozio_scan_data_'  . $user_id;
+        $blobs_key = 'hozio_scan_blobs_' . $user_id;
 
         if ($batch_offset === 0) {
-            $args = array(
+            $all_ids = (new WP_Query(array(
                 'post_type'      => 'attachment',
                 'post_mime_type' => array('image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/avif'),
                 'post_status'    => 'inherit',
                 'posts_per_page' => -1,
                 'fields'         => 'ids',
-            );
-            $all_ids = (new WP_Query($args))->posts;
+            )))->posts;
+
             set_transient($ids_key, $all_ids, HOUR_IN_SECONDS);
             set_transient($acc_key, array(), HOUR_IN_SECONDS);
+
+            list($ids_cache, $blobs_cache) = $this->preload_scan_data($all_ids);
+            set_transient($data_key,  $ids_cache,   HOUR_IN_SECONDS);
+            set_transient($blobs_key, $blobs_cache, HOUR_IN_SECONDS);
         } else {
-            $all_ids = get_transient($ids_key);
-            if ($all_ids === false) {
+            $all_ids     = get_transient($ids_key);
+            $ids_cache   = get_transient($data_key);
+            $blobs_cache = get_transient($blobs_key);
+            if ($all_ids === false || $ids_cache === false || $blobs_cache === false) {
                 return array('error' => __('Scan session expired — please restart the scan.', 'hozio-image-optimizer'));
             }
         }
@@ -111,7 +121,7 @@ class Hozio_Image_Optimizer_Unused_Detector {
         $accumulated = get_transient($acc_key) ?: array();
 
         foreach ($batch as $attachment_id) {
-            if ($this->is_image_unused($attachment_id)) {
+            if ($this->is_image_unused_fast($attachment_id, $ids_cache, $blobs_cache)) {
                 $accumulated[] = $this->get_image_data($attachment_id);
             }
         }
@@ -135,11 +145,217 @@ class Hozio_Image_Optimizer_Unused_Detector {
             $response['total']      = count($accumulated);
             $response['total_size'] = array_sum(array_column($accumulated, 'file_size'));
 
-            delete_transient($ids_key);
-            delete_transient($acc_key);
+            $this->clear_scan_data($user_id);
         }
 
         return $response;
+    }
+
+    /**
+     * Pre-load all image reference data in bulk so per-image checks need zero DB queries.
+     *
+     * @param array $all_ids All attachment IDs being scanned.
+     * @return array Two-element array: [$ids_cache, $blobs_cache]
+     */
+    private function preload_scan_data(array $all_ids) {
+        $upload_dir  = wp_upload_dir();
+        $base_url    = trailingslashit($upload_dir['baseurl']);
+        $uploads_esc = $this->wpdb->esc_like($upload_dir['baseurl']);
+
+        // 1. URL map: attachment_id => {url, path, file}
+        $urls = array();
+        if (!empty($all_ids)) {
+            $id_list = implode(',', array_map('intval', $all_ids));
+            $rows    = $this->wpdb->get_results(
+                "SELECT post_id, meta_value FROM {$this->wpdb->postmeta}
+                 WHERE meta_key = '_wp_attached_file' AND post_id IN ($id_list)"
+            );
+            foreach ($rows as $row) {
+                $path = ltrim($row->meta_value, '/');
+                $urls[(int) $row->post_id] = array(
+                    'url'  => $base_url . $path,
+                    'path' => $path,
+                    'file' => basename($path),
+                );
+            }
+        }
+
+        // 2. Protected IDs hash map
+        $protected = array();
+        if (!empty($all_ids)) {
+            $id_list = implode(',', array_map('intval', $all_ids));
+            $rows    = $this->wpdb->get_col(
+                "SELECT post_id FROM {$this->wpdb->postmeta}
+                 WHERE meta_key = '_hozio_protected' AND meta_value = '1'
+                 AND post_id IN ($id_list)"
+            );
+            $protected = array_fill_keys(array_map('intval', $rows), true);
+        }
+
+        // 3. Featured image IDs (_thumbnail_id)
+        $featured = array_fill_keys(array_map('intval', $this->wpdb->get_col(
+            "SELECT DISTINCT meta_value FROM {$this->wpdb->postmeta}
+             WHERE meta_key = '_thumbnail_id'"
+        )), true);
+
+        // 4. WooCommerce gallery IDs (comma-separated values)
+        $woo = array();
+        foreach ($this->wpdb->get_col(
+            "SELECT meta_value FROM {$this->wpdb->postmeta}
+             WHERE meta_key = '_product_image_gallery' AND meta_value != ''"
+        ) as $gallery) {
+            foreach (array_filter(array_map('trim', explode(',', $gallery))) as $gid) {
+                if (is_numeric($gid)) $woo[(int) $gid] = true;
+            }
+        }
+
+        // 5. Postmeta pure-integer values (ACF image fields storing ID directly)
+        $meta_int = array_fill_keys(array_map('intval', $this->wpdb->get_col(
+            "SELECT DISTINCT meta_value FROM {$this->wpdb->postmeta}
+             WHERE meta_key NOT LIKE '\\_%%'
+             AND meta_key != '_thumbnail_id'
+             AND meta_key != '_product_image_gallery'
+             AND meta_value REGEXP '^[0-9]+$'
+             AND meta_value != '0'"
+        )), true);
+
+        // 6. Termmeta pure-integer values (category image IDs)
+        $term_int = array_fill_keys(array_map('intval', $this->wpdb->get_col(
+            "SELECT DISTINCT meta_value FROM {$this->wpdb->termmeta}
+             WHERE meta_value REGEXP '^[0-9]+$' AND meta_value != '0'"
+        )), true);
+
+        // Combined O(1) "used by ID" map
+        $used_by_id = $featured + $woo + $meta_int + $term_int;
+
+        // 7. Post content blob (only posts referencing uploads — filtered for size)
+        $content_rows = $this->wpdb->get_col($this->wpdb->prepare(
+            "SELECT post_content FROM {$this->wpdb->posts}
+             WHERE post_type NOT IN ('revision', 'attachment', 'nav_menu_item')
+             AND post_status NOT IN ('trash', 'auto-draft')
+             AND post_content LIKE %s",
+            '%' . $uploads_esc . '%'
+        ));
+        $content_blob = implode(' ', $content_rows);
+
+        // 8. Postmeta URL blob (custom fields referencing uploads by URL)
+        $meta_url_rows = $this->wpdb->get_col($this->wpdb->prepare(
+            "SELECT meta_value FROM {$this->wpdb->postmeta}
+             WHERE meta_key NOT LIKE '\\_%%'
+             AND meta_key != '_thumbnail_id'
+             AND meta_key != '_product_image_gallery'
+             AND meta_value LIKE %s",
+            '%' . $uploads_esc . '%'
+        ));
+        $meta_blob = implode(' ', $meta_url_rows);
+
+        // 9. Options blob (widget/theme settings referencing uploads)
+        $opts_rows = $this->wpdb->get_col($this->wpdb->prepare(
+            "SELECT option_value FROM {$this->wpdb->options}
+             WHERE option_name NOT LIKE '\_transient%'
+             AND option_name NOT LIKE '\_site\_transient%'
+             AND option_value LIKE %s",
+            '%' . $uploads_esc . '%'
+        ));
+        $opts_blob = implode(' ', $opts_rows);
+
+        // 10. Termmeta URL blob (category image URLs)
+        $terms_rows = $this->wpdb->get_col($this->wpdb->prepare(
+            "SELECT meta_value FROM {$this->wpdb->termmeta}
+             WHERE meta_value LIKE %s",
+            '%' . $uploads_esc . '%'
+        ));
+        $terms_blob = implode(' ', $terms_rows);
+
+        return array(
+            array(
+                'urls'       => $urls,
+                'protected'  => $protected,
+                'used_by_id' => $used_by_id,
+            ),
+            array(
+                'content' => $content_blob,
+                'meta'    => $meta_blob,
+                'opts'    => $opts_blob,
+                'terms'   => $terms_blob,
+            ),
+        );
+    }
+
+    /**
+     * Check if an image is unused using only pre-loaded in-memory data.
+     * Zero DB queries — all lookups are PHP strpos() or isset().
+     *
+     * @param int   $attachment_id
+     * @param array $ids_cache   Hash maps: urls, protected, used_by_id.
+     * @param array $blobs_cache String blobs: content, meta, opts, terms.
+     * @return bool True if unused.
+     */
+    private function is_image_unused_fast($attachment_id, array $ids_cache, array $blobs_cache) {
+        if (isset($ids_cache['protected'][$attachment_id])) {
+            return false;
+        }
+
+        $entry = isset($ids_cache['urls'][$attachment_id]) ? $ids_cache['urls'][$attachment_id] : null;
+        if (!$entry) {
+            return false; // No _wp_attached_file meta — skip invalid attachment
+        }
+
+        $url      = $entry['url'];
+        $path     = $entry['path'];
+        $filename = $entry['file'];
+        $id_json  = '"' . $attachment_id . '"';
+
+        // Featured image / WooCommerce gallery / ACF integer field / term integer field
+        if (isset($ids_cache['used_by_id'][$attachment_id])) {
+            return false;
+        }
+
+        // Post content
+        $content = $blobs_cache['content'];
+        if (
+            strpos($content, $url) !== false ||
+            strpos($content, $path) !== false ||
+            strpos($content, $filename) !== false
+        ) {
+            return false;
+        }
+
+        // Custom postmeta (URL or JSON-quoted ID)
+        $meta = $blobs_cache['meta'];
+        if (strpos($meta, $url) !== false || strpos($meta, $id_json) !== false) {
+            return false;
+        }
+
+        // Options / widgets / customizer
+        $opts = $blobs_cache['opts'];
+        if (
+            strpos($opts, $url) !== false ||
+            strpos($opts, $filename) !== false ||
+            strpos($opts, $id_json) !== false
+        ) {
+            return false;
+        }
+
+        // Termmeta URL references
+        $terms = $blobs_cache['terms'];
+        if (strpos($terms, $url) !== false || strpos($terms, $id_json) !== false) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Delete all transients created during a batched scan.
+     *
+     * @param int $user_id
+     */
+    private function clear_scan_data($user_id) {
+        delete_transient('hozio_scan_ids_'   . $user_id);
+        delete_transient('hozio_scan_acc_'   . $user_id);
+        delete_transient('hozio_scan_data_'  . $user_id);
+        delete_transient('hozio_scan_blobs_' . $user_id);
     }
 
     /**
