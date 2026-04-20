@@ -88,7 +88,6 @@ class Hozio_Image_Optimizer_Unused_Detector {
     public function scan_batch($batch_offset = 0, $batch_size = 300) {
         $user_id  = get_current_user_id();
         $ids_key  = 'hozio_scan_ids_'  . $user_id;
-        $acc_key  = 'hozio_scan_acc_'  . $user_id;
         $data_key = 'hozio_scan_data_' . $user_id;
 
         if ($batch_offset === 0) {
@@ -105,7 +104,6 @@ class Hozio_Image_Optimizer_Unused_Detector {
             )))->posts));
 
             set_transient($ids_key, $all_ids, HOUR_IN_SECONDS);
-            set_transient($acc_key, array(),  HOUR_IN_SECONDS);
 
             $ids_cache = $this->preload_id_maps($all_ids);
             set_transient($data_key, $ids_cache, HOUR_IN_SECONDS);
@@ -123,37 +121,31 @@ class Hozio_Image_Optimizer_Unused_Detector {
 
         $total_ids   = count($all_ids);
         $batch       = array_slice($all_ids, $batch_offset, $batch_size);
-        $accumulated = get_transient($acc_key) ?: array();
 
+        // Accumulation happens client-side in JS — PHP returns only this batch's results.
+        // This eliminates the server-side accumulator transient that caused race conditions
+        // on Redis/Memcached hosts, producing different counts on consecutive scans.
+        $batch_unused = array();
         foreach ($batch as $attachment_id) {
             if ($this->is_image_unused_fast($attachment_id, $ids_cache, $blobs_cache)) {
-                $accumulated[] = $this->get_image_data($attachment_id);
+                $batch_unused[] = $this->get_image_data($attachment_id);
             }
         }
-        set_transient($acc_key, $accumulated, HOUR_IN_SECONDS);
 
         $next_offset = $batch_offset + count($batch);
         $done        = $next_offset >= $total_ids;
 
-        $response = array(
-            'done'        => $done,
-            'total_ids'   => $total_ids,
-            'scanned'     => $next_offset,
-            'next_offset' => $next_offset,
-        );
-
         if ($done) {
-            usort($accumulated, function($a, $b) {
-                return $b['file_size'] - $a['file_size'];
-            });
-            $response['images']     = $accumulated;
-            $response['total']      = count($accumulated);
-            $response['total_size'] = array_sum(array_column($accumulated, 'file_size'));
-
             $this->clear_scan_data($user_id);
         }
 
-        return $response;
+        return array(
+            'done'         => $done,
+            'total_ids'    => $total_ids,
+            'scanned'      => $next_offset,
+            'next_offset'  => $next_offset,
+            'batch_unused' => $batch_unused,
+        );
     }
 
     /**
@@ -416,7 +408,6 @@ class Hozio_Image_Optimizer_Unused_Detector {
      */
     private function clear_scan_data($user_id) {
         delete_transient('hozio_scan_ids_'  . $user_id);
-        delete_transient('hozio_scan_acc_'  . $user_id);
         delete_transient('hozio_scan_data_' . $user_id);
     }
 

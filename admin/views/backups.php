@@ -882,6 +882,10 @@ jQuery(document).ready(function($) {
         $('#unused-scan-progress-fill').css('width', '0%');
         $('#unused-scan-progress-label').text('<?php echo esc_js(__('Indexing attachments…', 'hozio-image-optimizer')); ?>');
 
+        // Client-side accumulator — eliminates the server-side transient that caused
+        // race conditions on Redis/Memcached hosts (26 vs 52 inconsistency).
+        var unusedAccumulated = [];
+
         function scanBatch(offset) {
             $.post(ajaxurl, {
                 action: 'hozio_scan_unused_images',
@@ -898,6 +902,8 @@ jQuery(document).ready(function($) {
                 }
 
                 var data = response.data;
+                unusedAccumulated = unusedAccumulated.concat(data.batch_unused || []);
+
                 var pct  = data.total_ids > 0 ? Math.min(Math.round((data.scanned / data.total_ids) * 100), 99) : 0;
                 $('#unused-scan-progress-fill').css('width', pct + '%');
                 $('#unused-scan-progress-label').text('<?php echo esc_js(__('Scanning…', 'hozio-image-optimizer')); ?> ' + data.scanned + ' / ' + data.total_ids);
@@ -907,7 +913,10 @@ jQuery(document).ready(function($) {
                     return;
                 }
 
-                // Final batch — show results
+                // All batches done — sort by file size and render
+                unusedAccumulated.sort(function(a, b) { return b.file_size - a.file_size; });
+                var totalSize = unusedAccumulated.reduce(function(sum, img) { return sum + (img.file_size || 0); }, 0);
+
                 $('#unused-scan-progress-fill').css('width', '100%');
                 $('#unused-scan-progress-label').text('<?php echo esc_js(__('Done!', 'hozio-image-optimizer')); ?>');
 
@@ -915,16 +924,16 @@ jQuery(document).ready(function($) {
                     btn.prop('disabled', false).html(originalHtml);
                     $('#unused-scanning-state').hide();
 
-                    unusedImages = data.images;
-                    $('#stat-unused-count').text(data.total);
-                    $('#stat-potential-savings').text(formatBytes(data.total_size));
+                    unusedImages = unusedAccumulated;
+                    $('#stat-unused-count').text(unusedAccumulated.length);
+                    $('#stat-potential-savings').text(formatBytes(totalSize));
                     $('#stat-protected').text(data.stats ? data.stats.protected_count : 0);
 
-                    if (data.total === 0) {
+                    if (unusedAccumulated.length === 0) {
                         $('#unused-clean-state').show();
                         $('#unused-bulk-actions').hide();
                     } else {
-                        renderUnusedImages(data.images);
+                        renderUnusedImages(unusedAccumulated);
                         $('#unused-results-grid').show();
                         $('#unused-bulk-actions').show();
                     }
