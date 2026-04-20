@@ -100,10 +100,12 @@ class Hozio_Image_Optimizer_Cleanup_Exporter {
             $used_filenames[$filename] = true;
 
             $manifest['images'][] = array(
-                'id' => $attachment_id,
-                'filename' => $filename,
+                'id'                => $attachment_id,
+                'filename'          => $filename,
                 'original_filename' => basename($file_path),
-                'size' => $file_size,
+                'size'              => $file_size,
+                'relative_path'     => get_post_meta($attachment_id, '_wp_attached_file', true),
+                'alt_text'          => get_post_meta($attachment_id, '_wp_attachment_image_alt', true),
             );
             $manifest['total_size'] += $file_size;
 
@@ -243,10 +245,16 @@ class Hozio_Image_Optimizer_Cleanup_Exporter {
     }
 
     /**
-     * Restore images from a ZIP archive
+     * Restore images from a ZIP archive created by create_cleanup_archive().
      *
-     * @param string $zip_path Path to the ZIP file
-     * @return array|WP_Error Restore results or error
+     * Reads manifest.json from the ZIP root, restores each image to its original
+     * upload path, creates a new WP attachment record, and updates all ID-based
+     * references (featured images, galleries, ACF/page-builder postmeta, options,
+     * termmeta) from the old attachment ID to the new one so broken frontend
+     * references are healed automatically.
+     *
+     * @param string $zip_path Path to the uploaded ZIP file.
+     * @return array|WP_Error Restore results or error.
      */
     public function restore_from_archive($zip_path) {
         if (!file_exists($zip_path)) {
@@ -258,13 +266,10 @@ class Hozio_Image_Optimizer_Cleanup_Exporter {
         }
 
         $zip = new ZipArchive();
-        $result = $zip->open($zip_path);
-
-        if ($result !== true) {
+        if ($zip->open($zip_path) !== true) {
             return new WP_Error('zip_open_failed', __('Failed to open ZIP archive', 'hozio-image-optimizer'));
         }
 
-        // Read manifest
         $manifest_content = $zip->getFromName('manifest.json');
         if (!$manifest_content) {
             $zip->close();
@@ -278,206 +283,183 @@ class Hozio_Image_Optimizer_Cleanup_Exporter {
         }
 
         $upload_dir = wp_upload_dir();
+        require_once ABSPATH . 'wp-admin/includes/image.php';
+
         $restored = array();
-        $failed = array();
+        $failed   = array();
 
         foreach ($manifest['images'] as $image_info) {
-            $attachment_id = $image_info['id'];
+            $old_id       = (int) $image_info['id'];
+            $zip_filename = $image_info['filename'];
+            $orig_name    = $image_info['original_filename'];
 
-            // Read metadata for this image
-            $metadata_content = $zip->getFromName('images/' . $attachment_id . '/metadata.json');
-            if (!$metadata_content) {
-                $failed[] = array('id' => $attachment_id, 'reason' => 'Missing metadata');
-                continue;
+            // Determine the restore path using saved relative_path (e.g. "2023/06/image.jpg").
+            // ZIPs created before v1.7.0 won't have this field; fall back to current year/month.
+            if (!empty($image_info['relative_path'])) {
+                $rel_path = $image_info['relative_path'];
+            } else {
+                $rel_path = date('Y/m') . '/' . $orig_name;
             }
 
-            $metadata = json_decode($metadata_content, true);
-            if (!$metadata) {
-                $failed[] = array('id' => $attachment_id, 'reason' => 'Invalid metadata');
-                continue;
+            $target_dir  = trailingslashit($upload_dir['basedir'] . '/' . dirname($rel_path));
+            $target_name = basename($rel_path);
+            $target_path = $target_dir . $target_name;
+
+            if (!file_exists($target_dir)) {
+                wp_mkdir_p($target_dir);
             }
 
-            // Restore files
-            $restore_result = $this->restore_image_files($zip, $attachment_id, $metadata, $upload_dir);
-            if (is_wp_error($restore_result)) {
-                $failed[] = array('id' => $attachment_id, 'reason' => $restore_result->get_error_message());
-                continue;
-            }
-
-            // Create attachment post
-            $new_attachment_id = $this->create_attachment_post($metadata, $restore_result['main_file']);
-            if (is_wp_error($new_attachment_id)) {
-                $failed[] = array('id' => $attachment_id, 'reason' => $new_attachment_id->get_error_message());
-                // Clean up restored files
-                foreach ($restore_result['restored_files'] as $file) {
-                    if (file_exists($file)) {
-                        unlink($file);
-                    }
-                }
-                continue;
-            }
-
-            // Restore metadata
-            $this->restore_attachment_metadata($new_attachment_id, $metadata);
-
-            $restored[] = array(
-                'original_id' => $attachment_id,
-                'new_id' => $new_attachment_id,
-                'filename' => $metadata['filename'],
-            );
-        }
-
-        $zip->close();
-
-        // Clean up the uploaded ZIP file
-        unlink($zip_path);
-
-        return array(
-            'restored' => $restored,
-            'failed' => $failed,
-            'restored_count' => count($restored),
-            'failed_count' => count($failed),
-        );
-    }
-
-    /**
-     * Restore image files from ZIP to upload directory
-     *
-     * @param ZipArchive $zip The ZIP archive
-     * @param int $attachment_id Original attachment ID
-     * @param array $metadata Image metadata
-     * @param array $upload_dir WordPress upload directory info
-     * @return array|WP_Error Restored file paths or error
-     */
-    private function restore_image_files($zip, $attachment_id, $metadata, $upload_dir) {
-        $original_path = $metadata['original_upload_path'];
-        $target_dir = $upload_dir['basedir'] . '/' . $original_path;
-
-        // Create directory if needed
-        if (!file_exists($target_dir)) {
-            wp_mkdir_p($target_dir);
-        }
-
-        $restored_files = array();
-        $main_file = '';
-
-        foreach ($metadata['all_files'] as $file_info) {
-            $zip_path = 'images/' . $attachment_id . '/files/' . $file_info['name'];
-            $target_path = $target_dir . '/' . $file_info['name'];
-
-            // Check if file already exists
+            // If original file path is already occupied, append -restored-N suffix.
             if (file_exists($target_path)) {
-                // Generate unique filename
-                $pathinfo = pathinfo($file_info['name']);
+                $pi      = pathinfo($target_name);
                 $counter = 1;
                 do {
-                    $new_name = $pathinfo['filename'] . '-restored-' . $counter . '.' . $pathinfo['extension'];
-                    $target_path = $target_dir . '/' . $new_name;
+                    $target_name = $pi['filename'] . '-restored-' . $counter . '.' . $pi['extension'];
+                    $target_path = $target_dir . $target_name;
+                    $rel_path    = dirname($rel_path) . '/' . $target_name;
                     $counter++;
                 } while (file_exists($target_path));
             }
 
-            // Extract file
-            $file_content = $zip->getFromName($zip_path);
+            // Extract file from ZIP root.
+            $file_content = $zip->getFromName($zip_filename);
             if ($file_content === false) {
-                continue; // Skip missing files but don't fail
+                $failed[] = array('id' => $old_id, 'filename' => $zip_filename, 'reason' => 'Not found in archive');
+                continue;
             }
 
-            $written = file_put_contents($target_path, $file_content);
-            if ($written === false) {
-                return new WP_Error('write_failed', sprintf(__('Failed to write file: %s', 'hozio-image-optimizer'), $file_info['name']));
+            if (file_put_contents($target_path, $file_content) === false) {
+                $failed[] = array('id' => $old_id, 'filename' => $zip_filename, 'reason' => 'Write failed');
+                continue;
             }
 
-            // Security: verify the extracted file is actually an image
+            // Security: ensure the extracted file is a valid image.
             $image_check = @getimagesize($target_path);
             if (!$image_check) {
-                @unlink($target_path); // Delete non-image file
-                continue; // Skip this file
+                @unlink($target_path);
+                $failed[] = array('id' => $old_id, 'filename' => $zip_filename, 'reason' => 'Not a valid image');
+                continue;
             }
 
-            $restored_files[] = $target_path;
+            // Create the WP attachment post.
+            $title = pathinfo($orig_name, PATHINFO_FILENAME);
+            $guid  = $upload_dir['baseurl'] . '/' . ltrim($rel_path, '/');
 
-            if ($file_info['type'] === 'original') {
-                $main_file = $target_path;
+            $new_id = wp_insert_attachment(array(
+                'post_title'     => $title,
+                'post_mime_type' => $image_check['mime'],
+                'post_status'    => 'inherit',
+                'guid'           => $guid,
+            ), $target_path);
+
+            if (is_wp_error($new_id)) {
+                @unlink($target_path);
+                $failed[] = array('id' => $old_id, 'filename' => $zip_filename, 'reason' => $new_id->get_error_message());
+                continue;
             }
+
+            update_post_meta($new_id, '_wp_attached_file', $rel_path);
+
+            $attach_meta = wp_generate_attachment_metadata($new_id, $target_path);
+            wp_update_attachment_metadata($new_id, $attach_meta);
+
+            if (!empty($image_info['alt_text'])) {
+                update_post_meta($new_id, '_wp_attachment_image_alt', sanitize_text_field($image_info['alt_text']));
+            }
+
+            // Heal all broken ID references on the frontend.
+            if ($old_id !== $new_id) {
+                $this->update_id_references($old_id, $new_id);
+            }
+
+            $restored[] = array(
+                'original_id' => $old_id,
+                'new_id'      => $new_id,
+                'filename'    => $target_name,
+                'url'         => $guid,
+            );
         }
 
-        if (empty($main_file)) {
-            return new WP_Error('no_main_file', __('Original file not found in archive', 'hozio-image-optimizer'));
-        }
+        $zip->close();
+        @unlink($zip_path);
 
         return array(
-            'main_file' => $main_file,
-            'restored_files' => $restored_files,
+            'restored'       => $restored,
+            'failed'         => $failed,
+            'restored_count' => count($restored),
+            'failed_count'   => count($failed),
         );
     }
 
     /**
-     * Create WordPress attachment post for restored image
+     * Update every place on the site that references $old_id to point to $new_id.
      *
-     * @param array $metadata Original metadata
-     * @param string $file_path Path to the main image file
-     * @return int|WP_Error New attachment ID or error
+     * Covers: featured images, WooCommerce galleries, JSON-quoted ID references
+     * in postmeta and options (ACF, Elementor, page builders, widgets, customizer),
+     * and exact-integer termmeta values (category image IDs).
+     *
+     * @param int $old_id Original attachment ID that no longer exists.
+     * @param int $new_id Newly created attachment ID.
      */
-    private function create_attachment_post($metadata, $file_path) {
-        $upload_dir = wp_upload_dir();
+    private function update_id_references($old_id, $new_id) {
+        global $wpdb;
+        $old = (int) $old_id;
+        $new = (int) $new_id;
 
-        // Calculate relative path
-        $relative_path = str_replace($upload_dir['basedir'] . '/', '', $file_path);
-
-        $attachment_data = array(
-            'post_title' => $metadata['post_title'],
-            'post_content' => $metadata['post_content'],
-            'post_excerpt' => $metadata['post_excerpt'],
-            'post_name' => $metadata['post_name'],
-            'post_mime_type' => $metadata['post_mime_type'],
-            'post_status' => 'inherit',
-            'post_parent' => 0, // Don't restore parent relationship
-            'guid' => $upload_dir['baseurl'] . '/' . $relative_path,
+        // Featured image.
+        $wpdb->update(
+            $wpdb->postmeta,
+            array('meta_value' => $new),
+            array('meta_key' => '_thumbnail_id', 'meta_value' => $old)
         );
 
-        $attachment_id = wp_insert_attachment($attachment_data, $file_path);
-
-        if (is_wp_error($attachment_id)) {
-            return $attachment_id;
+        // WooCommerce product gallery (comma-separated IDs).
+        $galleries = $wpdb->get_results($wpdb->prepare(
+            "SELECT meta_id, meta_value FROM {$wpdb->postmeta}
+             WHERE meta_key = '_product_image_gallery'
+             AND (meta_value = %s OR meta_value LIKE %s OR meta_value LIKE %s OR meta_value LIKE %s)",
+            $old,
+            $old . ',%',
+            '%,' . $old . ',%',
+            '%,' . $old
+        ));
+        foreach ($galleries as $row) {
+            $ids     = array_filter(explode(',', $row->meta_value), 'is_numeric');
+            $updated = implode(',', array_map(function ($v) use ($old, $new) {
+                return (int) $v === $old ? $new : (int) $v;
+            }, $ids));
+            $wpdb->update($wpdb->postmeta, array('meta_value' => $updated), array('meta_id' => $row->meta_id));
         }
 
-        // Generate attachment metadata (creates thumbnails if they don't exist)
-        require_once(ABSPATH . 'wp-admin/includes/image.php');
-        $attach_data = wp_generate_attachment_metadata($attachment_id, $file_path);
-        wp_update_attachment_metadata($attachment_id, $attach_data);
+        // JSON-quoted ID in any postmeta (ACF, Elementor, page builders, etc.).
+        // REPLACE() is safe: '"123"' cannot be a substring of '"1234"' or '"12"'.
+        $wpdb->query($wpdb->prepare(
+            "UPDATE {$wpdb->postmeta}
+             SET meta_value = REPLACE(meta_value, %s, %s)
+             WHERE meta_value LIKE %s",
+            '"' . $old . '"',
+            '"' . $new . '"',
+            '%"' . $old . '"%'
+        ));
 
-        return $attachment_id;
-    }
+        // JSON-quoted ID in options (widgets, customizer, theme settings).
+        $wpdb->query($wpdb->prepare(
+            "UPDATE {$wpdb->options}
+             SET option_value = REPLACE(option_value, %s, %s)
+             WHERE option_value LIKE %s
+             AND option_name NOT LIKE '\_transient%'
+             AND option_name NOT LIKE '\_site\_transient%'",
+            '"' . $old . '"',
+            '"' . $new . '"',
+            '%"' . $old . '"%'
+        ));
 
-    /**
-     * Restore additional metadata for an attachment
-     *
-     * @param int $attachment_id The new attachment ID
-     * @param array $metadata Original metadata
-     */
-    private function restore_attachment_metadata($attachment_id, $metadata) {
-        // Restore alt text
-        if (!empty($metadata['_wp_attachment_image_alt'])) {
-            update_post_meta($attachment_id, '_wp_attachment_image_alt', $metadata['_wp_attachment_image_alt']);
-        }
-
-        // Restore any custom Hozio meta (but not the protected flag)
-        $hozio_meta_keys = array(
-            '_hozio_optimized',
-            '_hozio_original_size',
-            '_hozio_optimized_size',
-            '_hozio_savings_bytes',
+        // Termmeta exact integer (category/term image IDs stored as bare integers).
+        $wpdb->update(
+            $wpdb->termmeta,
+            array('meta_value' => $new),
+            array('meta_value' => $old)
         );
-
-        if (!empty($metadata['all_meta'])) {
-            foreach ($hozio_meta_keys as $key) {
-                if (isset($metadata['all_meta'][$key])) {
-                    $value = is_array($metadata['all_meta'][$key]) ? $metadata['all_meta'][$key][0] : $metadata['all_meta'][$key];
-                    update_post_meta($attachment_id, $key, $value);
-                }
-            }
-        }
     }
 
     /**

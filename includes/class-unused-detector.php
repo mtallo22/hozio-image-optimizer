@@ -93,6 +93,9 @@ class Hozio_Image_Optimizer_Unused_Detector {
         $blobs_key = 'hozio_scan_blobs_' . $user_id;
 
         if ($batch_offset === 0) {
+            // Wipe any stale transients from a previous aborted scan before starting fresh.
+            $this->clear_scan_data($user_id);
+
             $all_ids = (new WP_Query(array(
                 'post_type'      => 'attachment',
                 'post_mime_type' => array('image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/avif'),
@@ -225,10 +228,57 @@ class Hozio_Image_Optimizer_Unused_Detector {
              WHERE meta_value REGEXP '^[0-9]+$' AND meta_value != '0'"
         )), true);
 
-        // Combined O(1) "used by ID" map
-        $used_by_id = $featured + $woo + $meta_int + $term_int;
+        // 7. JSON-quoted IDs in non-private postmeta (ACF, page builders, etc.)
+        // These are values like {"image_id":"123"} that don't contain the uploads URL,
+        // so they aren't caught by meta_blob but ARE referenced by image ID.
+        $meta_json_rows = $this->wpdb->get_col(
+            "SELECT meta_value FROM {$this->wpdb->postmeta}
+             WHERE meta_key NOT LIKE '\\_%%'
+             AND meta_key != '_thumbnail_id'
+             AND meta_key != '_product_image_gallery'
+             AND meta_value REGEXP '\"[0-9]+\"'"
+        );
+        $meta_json_ids = array();
+        foreach ($meta_json_rows as $v) {
+            preg_match_all('/"(\d+)"/', $v, $m);
+            foreach ($m[1] as $id) {
+                $meta_json_ids[(int) $id] = true;
+            }
+        }
 
-        // 7. Post content blob (only posts referencing uploads — filtered for size)
+        // 8. JSON-quoted IDs in non-transient options (widgets, customizer, etc.)
+        $opts_json_rows = $this->wpdb->get_col(
+            "SELECT option_value FROM {$this->wpdb->options}
+             WHERE option_name NOT LIKE '\\_transient%%'
+             AND option_name NOT LIKE '\\_site\_transient%%'
+             AND option_value REGEXP '\"[0-9]+\"'"
+        );
+        $opts_json_ids = array();
+        foreach ($opts_json_rows as $v) {
+            preg_match_all('/"(\d+)"/', $v, $m);
+            foreach ($m[1] as $id) {
+                $opts_json_ids[(int) $id] = true;
+            }
+        }
+
+        // 9. JSON-quoted IDs in termmeta (rare but possible in some category plugins)
+        $term_json_rows = $this->wpdb->get_col(
+            "SELECT meta_value FROM {$this->wpdb->termmeta}
+             WHERE meta_value REGEXP '\"[0-9]+\"'"
+        );
+        $term_json_ids = array();
+        foreach ($term_json_rows as $v) {
+            preg_match_all('/"(\d+)"/', $v, $m);
+            foreach ($m[1] as $id) {
+                $term_json_ids[(int) $id] = true;
+            }
+        }
+
+        // Combined O(1) "used by ID" map — covers all ways an image ID can be stored
+        $used_by_id = $featured + $woo + $meta_int + $term_int
+                    + $meta_json_ids + $opts_json_ids + $term_json_ids;
+
+        // 10. Post content blob (posts referencing uploads by URL)
         $content_rows = $this->wpdb->get_col($this->wpdb->prepare(
             "SELECT post_content FROM {$this->wpdb->posts}
              WHERE post_type NOT IN ('revision', 'attachment', 'nav_menu_item')
@@ -238,7 +288,7 @@ class Hozio_Image_Optimizer_Unused_Detector {
         ));
         $content_blob = implode(' ', $content_rows);
 
-        // 8. Postmeta URL blob (custom fields referencing uploads by URL)
+        // 11. Postmeta URL blob (custom fields referencing uploads by URL)
         $meta_url_rows = $this->wpdb->get_col($this->wpdb->prepare(
             "SELECT meta_value FROM {$this->wpdb->postmeta}
              WHERE meta_key NOT LIKE '\\_%%'
@@ -249,7 +299,7 @@ class Hozio_Image_Optimizer_Unused_Detector {
         ));
         $meta_blob = implode(' ', $meta_url_rows);
 
-        // 9. Options blob (widget/theme settings referencing uploads)
+        // 12. Options URL blob (widget/theme settings referencing uploads by URL)
         $opts_rows = $this->wpdb->get_col($this->wpdb->prepare(
             "SELECT option_value FROM {$this->wpdb->options}
              WHERE option_name NOT LIKE '\_transient%'
@@ -259,7 +309,7 @@ class Hozio_Image_Optimizer_Unused_Detector {
         ));
         $opts_blob = implode(' ', $opts_rows);
 
-        // 10. Termmeta URL blob (category image URLs)
+        // 13. Termmeta URL blob (category image URLs)
         $terms_rows = $this->wpdb->get_col($this->wpdb->prepare(
             "SELECT meta_value FROM {$this->wpdb->termmeta}
              WHERE meta_value LIKE %s",
@@ -304,14 +354,13 @@ class Hozio_Image_Optimizer_Unused_Detector {
         $url      = $entry['url'];
         $path     = $entry['path'];
         $filename = $entry['file'];
-        $id_json  = '"' . $attachment_id . '"';
 
-        // Featured image / WooCommerce gallery / ACF integer field / term integer field
+        // Featured image, WooCommerce gallery, integer meta, JSON-quoted ID in meta/opts/termmeta
         if (isset($ids_cache['used_by_id'][$attachment_id])) {
             return false;
         }
 
-        // Post content
+        // Post content (full URL, relative path, or bare filename)
         $content = $blobs_cache['content'];
         if (
             strpos($content, $url) !== false ||
@@ -321,25 +370,21 @@ class Hozio_Image_Optimizer_Unused_Detector {
             return false;
         }
 
-        // Custom postmeta (URL or JSON-quoted ID)
+        // Custom postmeta URL references (JSON-quoted IDs already in used_by_id)
         $meta = $blobs_cache['meta'];
-        if (strpos($meta, $url) !== false || strpos($meta, $id_json) !== false) {
+        if (strpos($meta, $url) !== false) {
             return false;
         }
 
-        // Options / widgets / customizer
+        // Options URL/filename references (JSON-quoted IDs already in used_by_id)
         $opts = $blobs_cache['opts'];
-        if (
-            strpos($opts, $url) !== false ||
-            strpos($opts, $filename) !== false ||
-            strpos($opts, $id_json) !== false
-        ) {
+        if (strpos($opts, $url) !== false || strpos($opts, $filename) !== false) {
             return false;
         }
 
-        // Termmeta URL references
+        // Termmeta URL references (integer and JSON-quoted IDs already in used_by_id)
         $terms = $blobs_cache['terms'];
-        if (strpos($terms, $url) !== false || strpos($terms, $id_json) !== false) {
+        if (strpos($terms, $url) !== false) {
             return false;
         }
 
