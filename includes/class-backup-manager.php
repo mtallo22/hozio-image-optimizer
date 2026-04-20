@@ -507,8 +507,15 @@ class Hozio_Image_Optimizer_Backup_Manager {
         $attachment_ids = array_keys($backups);
         $attachment_ids = array_slice($attachment_ids, $offset, $per_page);
 
+        $orphaned = array();
         $images = array();
         foreach ($attachment_ids as $attachment_id) {
+            // Skip records for attachments that no longer exist in WordPress
+            if (!get_post($attachment_id)) {
+                $orphaned[] = $attachment_id;
+                continue;
+            }
+
             $backup = $backups[$attachment_id][0]; // Most recent backup
             $current_path = get_attached_file($attachment_id);
 
@@ -543,6 +550,15 @@ class Hozio_Image_Optimizer_Backup_Manager {
                 'file_size_formatted' => Hozio_Image_Optimizer_Helpers::format_bytes($file_size),
                 'mime_type' => $mime_type ? strtoupper(str_replace('image/', '', $mime_type)) : '',
             );
+        }
+
+        // Clean up orphaned records so they don't accumulate
+        if (!empty($orphaned)) {
+            foreach ($orphaned as $oid) {
+                unset($backups[$oid]);
+            }
+            update_option('hozio_image_backups', $backups, false);
+            $total = count($backups);
         }
 
         return array(

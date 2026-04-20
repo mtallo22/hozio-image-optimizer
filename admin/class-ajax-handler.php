@@ -1535,25 +1535,41 @@ class Hozio_Image_Optimizer_Ajax_Handler {
             wp_send_json_error(array('message' => __('No images selected', 'hozio-image-optimizer')));
         }
 
+        // Zipping many images can take a while
+        @set_time_limit(300);
+        @ini_set('memory_limit', '256M');
+
         // Create the archive first
         $exporter = new Hozio_Image_Optimizer_Cleanup_Exporter();
         $archive_result = $exporter->create_cleanup_archive($image_ids);
 
         if (is_wp_error($archive_result)) {
             wp_send_json_error(array('message' => $archive_result->get_error_message()));
+            return;
+        }
+
+        if (!$archive_result || !isset($archive_result['path'])) {
+            wp_send_json_error(array('message' => __('Failed to create ZIP archive', 'hozio-image-optimizer')));
+            return;
         }
 
         // Delete the images
         $delete_result = $exporter->delete_images($image_ids);
 
-        // Generate download URL
-        $upload_dir = wp_upload_dir();
-        $download_url = str_replace($upload_dir['basedir'], $upload_dir['baseurl'], $archive_result['path']);
+        // Stream through PHP — temp dir is .htaccess-protected so direct URLs 403
+        $token = wp_generate_password(32, false);
+        set_transient('hozio_zip_' . $token, $archive_result['path'], HOUR_IN_SECONDS);
+
+        $download_url = add_query_arg(array(
+            'action' => 'hozio_serve_temp_zip',
+            'token'  => $token,
+            'nonce'  => wp_create_nonce('hozio_serve_zip'),
+        ), admin_url('admin-ajax.php'));
 
         wp_send_json_success(array(
-            'archive' => $archive_result,
+            'archive'      => $archive_result,
             'download_url' => $download_url,
-            'deleted' => $delete_result,
+            'deleted'      => $delete_result,
         ));
     }
 

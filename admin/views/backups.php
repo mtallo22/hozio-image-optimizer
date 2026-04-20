@@ -144,6 +144,7 @@ if (class_exists('Hozio_Image_Optimizer_Broken_Detector')) {
                         <span id="backup-select-all-text"><?php esc_html_e('Select All', 'hozio-image-optimizer'); ?></span>
                     </label>
                     <button type="button" class="hz-pill-btn" id="bulk-restore-btn" style="display:none;"><?php esc_html_e('Restore Selected', 'hozio-image-optimizer'); ?></button>
+                    <button type="button" class="hz-pill-btn" id="bulk-delete-backups-btn" style="display:none;background:#ef4444;"><?php esc_html_e('Delete Selected', 'hozio-image-optimizer'); ?></button>
                     <span class="hz-selection-count" id="backup-selection-info" style="display:none;">
                         <strong id="backup-selected-count">0</strong> <?php esc_html_e('selected', 'hozio-image-optimizer'); ?>
                     </span>
@@ -595,15 +596,13 @@ jQuery(document).ready(function($) {
             attachment_id: id
         }, function(response) {
             if (response.success) {
-                item.addClass('removing');
-                setTimeout(function() {
-                    item.slideUp(300, function() {
-                        $(this).remove();
-                        if ($('.hozio-backups-grid .hozio-backup-item').length === 0) {
-                            location.reload();
-                        }
-                    });
-                }, 200);
+                item.slideUp(300, function() {
+                    $(this).remove();
+                    updateBackupSelection();
+                    if ($('.hozio-image-grid .hozio-backup-item').length === 0) {
+                        location.reload();
+                    }
+                });
             } else {
                 alert(response.data.message || '<?php echo esc_js(__('Error deleting backup', 'hozio-image-optimizer')); ?>');
                 btn.prop('disabled', false);
@@ -688,10 +687,12 @@ jQuery(document).ready(function($) {
 
         if (checked > 0) {
             $('#bulk-restore-btn').show();
+            $('#bulk-delete-backups-btn').show();
             $('#backup-selection-info').show();
             $('#backup-selected-count').text(checked);
         } else {
             $('#bulk-restore-btn').hide();
+            $('#bulk-delete-backups-btn').hide();
             $('#backup-selection-info').hide();
         }
 
@@ -731,6 +732,50 @@ jQuery(document).ready(function($) {
                 btn.prop('disabled', false).removeClass('loading');
             }
         });
+    });
+
+    // Bulk delete backups
+    $('#bulk-delete-backups-btn').on('click', function() {
+        var btn = $(this);
+        var ids = [];
+        $('.backup-checkbox:checked').each(function() {
+            ids.push($(this).data('id'));
+        });
+
+        if (ids.length === 0) return;
+
+        if (!confirm('<?php echo esc_js(__('Are you sure you want to delete these backups? This cannot be undone.', 'hozio-image-optimizer')); ?>')) {
+            return;
+        }
+
+        btn.prop('disabled', true).text('<?php echo esc_js(__('Deleting...', 'hozio-image-optimizer')); ?>');
+
+        var index = 0;
+        function deleteNext() {
+            if (index >= ids.length) {
+                if ($('.hozio-image-grid .hozio-backup-item').length === 0) {
+                    location.reload();
+                } else {
+                    btn.prop('disabled', false).text('<?php echo esc_js(__('Delete Selected', 'hozio-image-optimizer')); ?>');
+                    updateBackupSelection();
+                }
+                return;
+            }
+            var id = ids[index++];
+            $.post(ajaxurl, {
+                action: 'hozio_delete_backup',
+                nonce: hozioImageOptimizer.nonce,
+                attachment_id: id
+            }, function(response) {
+                if (response.success) {
+                    $('.hozio-backup-item[data-id="' + id + '"]').remove();
+                }
+                deleteNext();
+            }).fail(function() {
+                deleteNext();
+            });
+        }
+        deleteNext();
     });
 
     // Compare button
