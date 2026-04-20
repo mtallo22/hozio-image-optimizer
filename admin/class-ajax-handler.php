@@ -1850,6 +1850,9 @@ class Hozio_Image_Optimizer_Ajax_Handler {
             wp_send_json_error(array('message' => __('Insufficient permissions', 'hozio-image-optimizer')));
         }
 
+        if (function_exists('session_id') && session_id()) {
+            @session_write_close();
+        }
         @set_time_limit(60);
         $crawler = new Hozio_Image_Optimizer_Frontend_Crawler();
         $result  = $crawler->discover_urls_detailed();
@@ -1872,12 +1875,20 @@ class Hozio_Image_Optimizer_Ajax_Handler {
             wp_send_json_error(array('message' => __('Insufficient permissions', 'hozio-image-optimizer')));
         }
 
+        // Release the PHP session write lock so parallel AJAX requests from
+        // the browser don't serialize here. WooCommerce and many other
+        // plugins hold this lock open for the full request, which was
+        // capping our effective crawl parallelism at 1.
+        if (function_exists('session_id') && session_id()) {
+            @session_write_close();
+        }
+
         @set_time_limit(90);
 
         $urls_json  = isset($_POST['urls']) ? wp_unslash($_POST['urls']) : '[]';
         $urls       = json_decode($urls_json, true);
         $offset     = isset($_POST['offset']) ? intval($_POST['offset']) : 0;
-        $batch_size = isset($_POST['batch_size']) ? intval($_POST['batch_size']) : 10;
+        $batch_size = isset($_POST['batch_size']) ? intval($_POST['batch_size']) : 40;
 
         if (!is_array($urls)) {
             wp_send_json_error(array('message' => __('Invalid URL list', 'hozio-image-optimizer')));
@@ -2009,6 +2020,9 @@ class Hozio_Image_Optimizer_Ajax_Handler {
             wp_send_json_error(array('message' => 'Insufficient permissions'));
         }
 
+        if (function_exists('session_id') && session_id()) {
+            @session_write_close();
+        }
         @set_time_limit(300);
 
         $use_crawl = isset($_POST['use_crawl']) ? (bool) intval($_POST['use_crawl']) : true;

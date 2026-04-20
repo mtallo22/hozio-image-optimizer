@@ -17,7 +17,9 @@ if (!defined('ABSPATH')) {
 class Hozio_Image_Optimizer_Frontend_Crawler {
 
     const CACHE_OPTION = 'hozio_frontend_crawl_cache';
-    const CACHE_TTL    = 3600; // 1 hour
+    // Cache lives until the user clicks Refresh. Age is still reported in the
+    // badge so stale caches are visible, but time alone doesn't invalidate them.
+    const CACHE_TTL    = 0;
 
     private $wpdb;
     private $upload_baseurl;
@@ -43,7 +45,8 @@ class Hozio_Image_Optimizer_Frontend_Crawler {
             return null;
         }
         $age = time() - (int) $cache['timestamp'];
-        if ($age > self::CACHE_TTL) {
+        // CACHE_TTL = 0 means no time-based expiry (persist until manual refresh)
+        if (self::CACHE_TTL > 0 && $age > self::CACHE_TTL) {
             return null;
         }
         $cache['age_seconds'] = $age;
@@ -308,7 +311,7 @@ class Hozio_Image_Optimizer_Frontend_Crawler {
      *     @type int   $fetched         Number of URLs successfully fetched.
      * }
      */
-    public function crawl_batch(array $urls, $offset = 0, $batch_size = 30) {
+    public function crawl_batch(array $urls, $offset = 0, $batch_size = 40) {
         $slice = array_slice($urls, $offset, $batch_size);
         if (empty($slice)) {
             return array(

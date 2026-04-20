@@ -934,27 +934,33 @@ jQuery(document).ready(function($) {
         var crawlErrors = [];
 
         function discoverUrls() {
+            setProgress(8, '<?php echo esc_js(__('Planning crawl…', 'hozio-image-optimizer')); ?>');
             $.post(ajaxurl, { action: 'hozio_crawl_discover', nonce: hozioImageOptimizer.nonce }, function(response) {
                 if (!response.success) { abort(response.data && response.data.message); return; }
                 frontendUrls = response.data.urls || [];
                 var filteredOut = response.data.filtered_out || 0;
+                var rawTotal    = response.data.total_before_filter || frontendUrls.length;
                 if (!frontendUrls.length) {
                     runFinalScan();
                     return;
                 }
-                var extra = filteredOut > 0 ? ' (' + filteredOut + ' noise URLs skipped)' : '';
-                setProgress(10, '<?php echo esc_js(__('Crawling pages…', 'hozio-image-optimizer')); ?> 0 / ' + frontendUrls.length + extra);
+                // Tell the user exactly what's being crawled and what was skipped,
+                // so the number they see is the number we're actually fetching.
+                var summary = frontendUrls.length + ' <?php echo esc_js(__('pages to crawl', 'hozio-image-optimizer')); ?>';
+                if (filteredOut > 0) {
+                    summary += ' (' + filteredOut + ' <?php echo esc_js(__('of', 'hozio-image-optimizer')); ?> ' + rawTotal + ' <?php echo esc_js(__('noise URLs filtered', 'hozio-image-optimizer')); ?>)';
+                }
+                setProgress(10, summary + ' — <?php echo esc_js(__('starting…', 'hozio-image-optimizer')); ?>');
                 crawlAllParallel();
             }).fail(function() { abort(); });
         }
 
-        // Parallel crawl — run up to CONCURRENCY batches at once from the browser.
-        // Combined with curl_multi on the server (30/batch), this yields ~90
-        // simultaneous HTTP fetches in flight. For a 400-page site that's
-        // ~4-5 rounds of ~2s each = ~10 seconds instead of several minutes.
+        // Parallel crawl — 5 browser batches × 40 server curl_multi =
+        // ~200 HTTP fetches in flight at once. This is fine as a brief burst
+        // since the crawl only runs once and the result is then cached.
         function crawlAllParallel() {
-            var BATCH_SIZE  = 30;
-            var CONCURRENCY = 3;
+            var BATCH_SIZE  = 40;
+            var CONCURRENCY = 5;
             var total       = frontendUrls.length;
             var nextOffset  = 0;
             var inFlight    = 0;
@@ -1083,20 +1089,34 @@ jQuery(document).ready(function($) {
         });
     });
 
-    // Show cache status badge near the Scan button
+    // Format seconds as a short human-readable age
+    function formatAge(sec) {
+        if (sec < 60)         return sec + 's';
+        if (sec < 3600)       return Math.round(sec / 60) + 'm';
+        if (sec < 86400)      return Math.round(sec / 3600) + 'h';
+        return Math.round(sec / 86400) + 'd';
+    }
+
     function updateCrawlCacheBadge() {
         $.post(ajaxurl, { action: 'hozio_crawl_cache_status', nonce: hozioImageOptimizer.nonce }, function(response) {
             if (!response.success) return;
             var $badge = $('#crawl-cache-badge');
             if (response.data.has_cache) {
-                var ageMin = Math.round(response.data.age_seconds / 60);
+                var ageSec = response.data.age_seconds || 0;
+                var age    = formatAge(ageSec);
+                var stale  = ageSec > 86400 * 7; // >7 days
+                var color  = stale ? '#d97706' : '#16a34a';
+                var prefix = stale ? '&#9888; ' : '&#10003; ';
+                var label  = stale
+                    ? '<?php echo esc_js(__('Crawl cache is', 'hozio-image-optimizer')); ?> ' + age + ' <?php echo esc_js(__('old — consider refreshing', 'hozio-image-optimizer')); ?>'
+                    : '<?php echo esc_js(__('Frontend crawl cached', 'hozio-image-optimizer')); ?> ' + age + ' <?php echo esc_js(__('ago', 'hozio-image-optimizer')); ?>';
                 $badge.html(
-                    '<span style="color:#16a34a;">&#10003; <?php echo esc_js(__('Frontend crawl cached', 'hozio-image-optimizer')); ?> ' + ageMin + '<?php echo esc_js(__('m ago', 'hozio-image-optimizer')); ?> ' +
+                    '<span style="color:' + color + ';">' + prefix + label + ' ' +
                     '(' + response.data.pages_crawled + ' <?php echo esc_js(__('pages', 'hozio-image-optimizer')); ?>)</span> ' +
-                    '<a href="#" id="refresh-crawl-cache-btn" style="color:#64748b;font-size:11px;">[<?php echo esc_js(__('refresh', 'hozio-image-optimizer')); ?>]</a>'
+                    '<a href="#" id="refresh-crawl-cache-btn" style="color:#64748b;font-size:11px;margin-left:6px;">[<?php echo esc_js(__('refresh', 'hozio-image-optimizer')); ?>]</a>'
                 ).show();
             } else {
-                $badge.html('<span style="color:#64748b;"><?php echo esc_js(__('No crawl cache — first scan will crawl your site (~30s).', 'hozio-image-optimizer')); ?></span>').show();
+                $badge.html('<span style="color:#64748b;"><?php echo esc_js(__('No crawl cache — the first scan will crawl your site.', 'hozio-image-optimizer')); ?></span>').show();
             }
         });
     }
