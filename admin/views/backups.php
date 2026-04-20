@@ -337,6 +337,23 @@ if (class_exists('Hozio_Image_Optimizer_Broken_Detector')) {
                     </button>
                 </div>
 
+                <!-- Optional frontend verification (manually triggered for extra accuracy) -->
+                <div id="verify-all-frontend-wrap" style="display:none;padding:12px 16px;background:#f0f9ff;border-bottom:1px solid #bae6fd;">
+                    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+                        <span class="dashicons dashicons-shield" style="color:#0284c7;"></span>
+                        <div style="flex:1;min-width:240px;">
+                            <strong><?php esc_html_e('Extra safety check (optional)', 'hozio-image-optimizer'); ?></strong>
+                            <div style="font-size:12px;color:#475569;">
+                                <?php esc_html_e('Crawl every public page on your site and remove any candidate found on the frontend. Takes a few minutes on larger sites.', 'hozio-image-optimizer'); ?>
+                            </div>
+                        </div>
+                        <button type="button" class="hozio-btn hozio-btn-secondary btn-sm" id="verify-all-frontend-btn">
+                            <span class="dashicons dashicons-search"></span>
+                            <?php esc_html_e('Verify all with frontend crawl', 'hozio-image-optimizer'); ?>
+                        </button>
+                    </div>
+                </div>
+
                 <div class="hozio-card-body no-padding">
                     <!-- Initial State - Before Scan -->
                     <div class="hozio-empty-state large" id="unused-initial-state">
@@ -867,14 +884,9 @@ jQuery(document).ready(function($) {
     })();
     <?php endif; ?>
 
-    // Three-phase scan:
-    //   Phase 1: Crawl frontend pages and accumulate every image URL that
-    //            actually appears in the rendered HTML (ground truth).
-    //   Phase 2: DB scan for candidate unused images (fast but can have
-    //            false positives when page builders use exotic storage).
-    //   Phase 3: Cross-check: an image is flagged unused ONLY if it's
-    //            absent from the frontend AND absent from the database.
-    //            The intersection of both signals eliminates false positives.
+    // DB-only scan by default — fast (~60s for 1800 images).
+    // User can optionally click "Verify all with frontend" afterward to run
+    // the crawl + cross-reference pass and eliminate any false positives.
     $('#scan-unused-btn').on('click', function() {
         var btn = $(this);
         var originalHtml = btn.html();
@@ -887,85 +899,11 @@ jQuery(document).ready(function($) {
         $('#unused-results-grid').hide();
         $('#unused-scanning-state').show();
         $('#unused-scan-progress-fill').css('width', '0%');
-        $('#unused-scan-progress-label').text('<?php echo esc_js(__('Discovering frontend pages…', 'hozio-image-optimizer')); ?>');
+        $('#unused-scan-progress-label').text('<?php echo esc_js(__('Scanning database references…', 'hozio-image-optimizer')); ?>');
 
-        // State across all three phases
-        var frontendUrls      = [];           // list of public URLs to crawl
-        var usedUrlSet        = {};           // { url: true } aggregated across all pages
-        var usedFilenameSet   = {};           // { filename: true }
-        var dbCandidates      = [];           // images DB-flagged as unused
-        var crawlErrors       = [];           // pages that failed to fetch
+        var unusedAccumulated = [];
 
-        function abortScan(message) {
-            btn.prop('disabled', false).html(originalHtml);
-            $('#unused-scanning-state').hide();
-            $('#unused-initial-state').show();
-            alert(message || '<?php echo esc_js(__('Error scanning images', 'hozio-image-optimizer')); ?>');
-        }
-
-        // -------- Phase 1: discover URLs --------
-        function discoverUrls() {
-            $.post(ajaxurl, {
-                action: 'hozio_crawl_discover',
-                nonce:  hozioImageOptimizer.nonce
-            }, function(response) {
-                if (!response.success) {
-                    abortScan(response.data && response.data.message);
-                    return;
-                }
-                frontendUrls = response.data.urls || [];
-                if (frontendUrls.length === 0) {
-                    // No pages to crawl — skip straight to DB scan with an empty used-set
-                    runDbScan(0);
-                    return;
-                }
-                $('#unused-scan-progress-label').text(
-                    '<?php echo esc_js(__('Crawling frontend pages…', 'hozio-image-optimizer')); ?> ' +
-                    '0 / ' + frontendUrls.length
-                );
-                crawlBatch(0);
-            }).fail(function() { abortScan(); });
-        }
-
-        // -------- Phase 2: crawl each page, accumulate used-URL set --------
-        function crawlBatch(offset) {
-            $.post(ajaxurl, {
-                action:     'hozio_crawl_batch',
-                nonce:      hozioImageOptimizer.nonce,
-                urls:       JSON.stringify(frontendUrls),
-                offset:     offset,
-                batch_size: 10
-            }, function(response) {
-                if (!response.success) {
-                    abortScan(response.data && response.data.message);
-                    return;
-                }
-                var data = response.data;
-                (data.found_urls || []).forEach(function(u) { usedUrlSet[u] = true; });
-                (data.found_filenames || []).forEach(function(f) { usedFilenameSet[f] = true; });
-                if (data.errors && data.errors.length) {
-                    crawlErrors = crawlErrors.concat(data.errors);
-                }
-
-                var pct = Math.min(Math.round((data.next_offset / frontendUrls.length) * 50), 50);
-                $('#unused-scan-progress-fill').css('width', pct + '%');
-                $('#unused-scan-progress-label').text(
-                    '<?php echo esc_js(__('Crawling frontend pages…', 'hozio-image-optimizer')); ?> ' +
-                    Math.min(data.next_offset, frontendUrls.length) + ' / ' + frontendUrls.length
-                );
-
-                if (!data.done) {
-                    crawlBatch(data.next_offset);
-                    return;
-                }
-
-                $('#unused-scan-progress-label').text('<?php echo esc_js(__('Checking database references…', 'hozio-image-optimizer')); ?>');
-                runDbScan(0);
-            }).fail(function() { abortScan(); });
-        }
-
-        // -------- Phase 3: DB scan (existing logic, fully stateless now) --------
-        function runDbScan(offset) {
+        function scanBatch(offset) {
             $.post(ajaxurl, {
                 action:       'hozio_scan_unused_images',
                 nonce:        hozioImageOptimizer.nonce,
@@ -973,37 +911,131 @@ jQuery(document).ready(function($) {
                 batch_size:   300
             }, function(response) {
                 if (!response.success) {
-                    abortScan(response.data && response.data.message);
+                    btn.prop('disabled', false).html(originalHtml);
+                    $('#unused-scanning-state').hide();
+                    $('#unused-initial-state').show();
+                    alert(response.data && response.data.message || '<?php echo esc_js(__('Error scanning images', 'hozio-image-optimizer')); ?>');
                     return;
                 }
-                var data = response.data;
-                dbCandidates = dbCandidates.concat(data.batch_unused || []);
 
-                var pct = data.total_ids > 0
-                    ? 50 + Math.min(Math.round((data.scanned / data.total_ids) * 45), 45)
-                    : 95;
+                var data = response.data;
+                unusedAccumulated = unusedAccumulated.concat(data.batch_unused || []);
+
+                var pct = data.total_ids > 0 ? Math.min(Math.round((data.scanned / data.total_ids) * 100), 99) : 0;
                 $('#unused-scan-progress-fill').css('width', pct + '%');
-                $('#unused-scan-progress-label').text(
-                    '<?php echo esc_js(__('Checking database references…', 'hozio-image-optimizer')); ?> ' +
-                    data.scanned + ' / ' + data.total_ids
-                );
+                $('#unused-scan-progress-label').text('<?php echo esc_js(__('Scanning database references…', 'hozio-image-optimizer')); ?> ' + data.scanned + ' / ' + data.total_ids);
 
                 if (!data.done) {
-                    runDbScan(data.next_offset);
+                    scanBatch(data.next_offset);
                     return;
                 }
 
-                $('#unused-scan-progress-label').text('<?php echo esc_js(__('Cross-referencing with frontend…', 'hozio-image-optimizer')); ?>');
-                verifyCandidates();
-            }).fail(function() { abortScan(); });
+                unusedAccumulated.sort(function(a, b) { return b.file_size - a.file_size; });
+                var totalSize = unusedAccumulated.reduce(function(sum, img) { return sum + (img.file_size || 0); }, 0);
+
+                $('#unused-scan-progress-fill').css('width', '100%');
+                $('#unused-scan-progress-label').text('<?php echo esc_js(__('Done!', 'hozio-image-optimizer')); ?>');
+
+                setTimeout(function() {
+                    btn.prop('disabled', false).html(originalHtml);
+                    $('#unused-scanning-state').hide();
+
+                    unusedImages = unusedAccumulated;
+                    $('#stat-unused-count').text(unusedAccumulated.length);
+                    $('#stat-potential-savings').text(formatBytes(totalSize));
+
+                    if (unusedAccumulated.length === 0) {
+                        $('#unused-clean-state').show();
+                        $('#unused-bulk-actions').hide();
+                        $('#verify-all-frontend-wrap').hide();
+                    } else {
+                        renderUnusedImages(unusedAccumulated);
+                        $('#unused-results-grid').show();
+                        $('#unused-bulk-actions').show();
+                        $('#verify-all-frontend-wrap').show();
+                    }
+                }, 400);
+            }).fail(function() {
+                btn.prop('disabled', false).html(originalHtml);
+                $('#unused-scanning-state').hide();
+                $('#unused-initial-state').show();
+                alert('<?php echo esc_js(__('Error scanning images', 'hozio-image-optimizer')); ?>');
+            });
         }
 
-        // -------- Phase 4: cross-reference DB candidates against frontend --------
-        function verifyCandidates() {
-            if (dbCandidates.length === 0) {
-                finish([], [], 0);
-                return;
-            }
+        scanBatch(0);
+    });
+
+    // "Verify all with frontend crawl" — manually triggered heavyweight pass.
+    // Crawls every public page in parallel, builds a used-URL set, then
+    // removes any candidate image found on the frontend from the list.
+    $(document).on('click', '#verify-all-frontend-btn', function() {
+        var btn = $(this);
+        var originalHtml = btn.html();
+
+        if (!unusedImages || !unusedImages.length) {
+            alert('<?php echo esc_js(__('No candidates to verify. Run the scan first.', 'hozio-image-optimizer')); ?>');
+            return;
+        }
+
+        if (!confirm('<?php echo esc_js(__('This will crawl every public page on your site and may take a few minutes on larger sites. Continue?', 'hozio-image-optimizer')); ?>')) {
+            return;
+        }
+
+        btn.prop('disabled', true).html('<span class="dashicons dashicons-update spin"></span> <?php echo esc_js(__('Verifying…', 'hozio-image-optimizer')); ?>');
+
+        $('#unused-scanning-state').show();
+        $('#unused-scan-progress-fill').css('width', '0%');
+        $('#unused-scan-progress-label').text('<?php echo esc_js(__('Discovering frontend pages…', 'hozio-image-optimizer')); ?>');
+
+        var frontendUrls = [];
+        var usedUrlSet = {};
+        var usedFilenameSet = {};
+        var crawlErrors = [];
+        var dbCandidates = unusedImages.slice();
+
+        function abortVerify(msg) {
+            btn.prop('disabled', false).html(originalHtml);
+            $('#unused-scanning-state').hide();
+            alert(msg || '<?php echo esc_js(__('Verification failed', 'hozio-image-optimizer')); ?>');
+        }
+
+        function discoverUrls() {
+            $.post(ajaxurl, { action: 'hozio_crawl_discover', nonce: hozioImageOptimizer.nonce }, function(response) {
+                if (!response.success) { abortVerify(response.data && response.data.message); return; }
+                frontendUrls = response.data.urls || [];
+                if (!frontendUrls.length) { abortVerify('<?php echo esc_js(__('No pages found to crawl.', 'hozio-image-optimizer')); ?>'); return; }
+                $('#unused-scan-progress-label').text('<?php echo esc_js(__('Crawling pages…', 'hozio-image-optimizer')); ?> 0 / ' + frontendUrls.length);
+                crawlBatch(0);
+            }).fail(function() { abortVerify(); });
+        }
+
+        function crawlBatch(offset) {
+            $.post(ajaxurl, {
+                action:     'hozio_crawl_batch',
+                nonce:      hozioImageOptimizer.nonce,
+                urls:       JSON.stringify(frontendUrls),
+                offset:     offset,
+                batch_size: 20
+            }, function(response) {
+                if (!response.success) { abortVerify(response.data && response.data.message); return; }
+                var data = response.data;
+                (data.found_urls || []).forEach(function(u) { usedUrlSet[u] = true; });
+                (data.found_filenames || []).forEach(function(f) { usedFilenameSet[f] = true; });
+                if (data.errors && data.errors.length) crawlErrors = crawlErrors.concat(data.errors);
+
+                var pct = Math.min(Math.round((data.next_offset / frontendUrls.length) * 90), 90);
+                $('#unused-scan-progress-fill').css('width', pct + '%');
+                $('#unused-scan-progress-label').text('<?php echo esc_js(__('Crawling pages…', 'hozio-image-optimizer')); ?> ' + Math.min(data.next_offset, frontendUrls.length) + ' / ' + frontendUrls.length);
+
+                if (!data.done) { crawlBatch(data.next_offset); return; }
+
+                $('#unused-scan-progress-label').text('<?php echo esc_js(__('Cross-referencing…', 'hozio-image-optimizer')); ?>');
+                verify();
+            }).fail(function() { abortVerify(); });
+        }
+
+        function verify() {
             $.post(ajaxurl, {
                 action:         'hozio_verify_unused_candidates',
                 nonce:          hozioImageOptimizer.nonce,
@@ -1011,51 +1043,47 @@ jQuery(document).ready(function($) {
                 used_urls:      JSON.stringify(Object.keys(usedUrlSet)),
                 used_filenames: JSON.stringify(Object.keys(usedFilenameSet))
             }, function(response) {
-                if (!response.success) {
-                    abortScan(response.data && response.data.message);
-                    return;
-                }
+                if (!response.success) { abortVerify(response.data && response.data.message); return; }
                 var d = response.data;
-                finish(d.truly_unused || [], d.rescued || [], d.rescued_count || 0);
-            }).fail(function() { abortScan(); });
+                var trulyUnused = d.truly_unused || [];
+                var rescued = d.rescued || [];
+
+                trulyUnused.sort(function(a, b) { return b.file_size - a.file_size; });
+                var totalSize = trulyUnused.reduce(function(s, i) { return s + (i.file_size || 0); }, 0);
+
+                $('#unused-scan-progress-fill').css('width', '100%');
+                $('#unused-scan-progress-label').text('<?php echo esc_js(__('Done!', 'hozio-image-optimizer')); ?>');
+
+                setTimeout(function() {
+                    btn.prop('disabled', false).html(originalHtml);
+                    $('#unused-scanning-state').hide();
+
+                    unusedImages = trulyUnused;
+                    $('#stat-unused-count').text(trulyUnused.length);
+                    $('#stat-potential-savings').text(formatBytes(totalSize));
+
+                    if (trulyUnused.length === 0) {
+                        $('#unused-results-grid').hide();
+                        $('#unused-clean-state').show();
+                        $('#unused-bulk-actions').hide();
+                        $('#verify-all-frontend-wrap').hide();
+                    } else {
+                        renderUnusedImages(trulyUnused);
+                    }
+
+                    var msg = '<?php echo esc_js(__('Verified!', 'hozio-image-optimizer')); ?> ' +
+                        rescued.length + ' <?php echo esc_js(__('image(s) rescued (found on frontend).', 'hozio-image-optimizer')); ?>\n' +
+                        trulyUnused.length + ' <?php echo esc_js(__('image(s) confirmed unused.', 'hozio-image-optimizer')); ?>';
+                    if (crawlErrors.length) {
+                        msg += '\n\n' + crawlErrors.length + ' <?php echo esc_js(__('page(s) failed to fetch (check browser console).', 'hozio-image-optimizer')); ?>';
+                        if (window.console) console.warn('[Hozio] Crawl errors:', crawlErrors);
+                    }
+                    if (rescued.length && window.console) console.log('[Hozio] Rescued:', rescued);
+                    alert(msg);
+                }, 400);
+            }).fail(function() { abortVerify(); });
         }
 
-        // -------- Phase 5: render results --------
-        function finish(trulyUnused, rescued, rescuedCount) {
-            trulyUnused.sort(function(a, b) { return b.file_size - a.file_size; });
-            var totalSize = trulyUnused.reduce(function(sum, img) { return sum + (img.file_size || 0); }, 0);
-
-            $('#unused-scan-progress-fill').css('width', '100%');
-            $('#unused-scan-progress-label').text('<?php echo esc_js(__('Done!', 'hozio-image-optimizer')); ?>');
-
-            setTimeout(function() {
-                btn.prop('disabled', false).html(originalHtml);
-                $('#unused-scanning-state').hide();
-
-                unusedImages = trulyUnused;
-                $('#stat-unused-count').text(trulyUnused.length);
-                $('#stat-potential-savings').text(formatBytes(totalSize));
-
-                // Console log of what was rescued — helpful for trust
-                if (rescuedCount > 0 && window.console) {
-                    console.log('[Hozio] ' + rescuedCount + ' image(s) DB-flagged but found on frontend — kept safe:', rescued);
-                }
-                if (crawlErrors.length && window.console) {
-                    console.warn('[Hozio] ' + crawlErrors.length + ' page(s) failed to crawl (images used only on these pages may be missed):', crawlErrors);
-                }
-
-                if (trulyUnused.length === 0) {
-                    $('#unused-clean-state').show();
-                    $('#unused-bulk-actions').hide();
-                } else {
-                    renderUnusedImages(trulyUnused);
-                    $('#unused-results-grid').show();
-                    $('#unused-bulk-actions').show();
-                }
-            }, 400);
-        }
-
-        // Kick off phase 1
         discoverUrls();
     });
 
@@ -1257,6 +1285,7 @@ jQuery(document).ready(function($) {
                             $('#unused-results-grid').hide();
                             $('#unused-clean-state').show();
                             $('#unused-bulk-actions').hide();
+                            $('#verify-all-frontend-wrap').hide();
                         }
                     });
                 });

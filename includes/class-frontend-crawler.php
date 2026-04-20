@@ -214,40 +214,36 @@ class Hozio_Image_Optimizer_Frontend_Crawler {
      *     @type int   $fetched         Number of URLs successfully fetched.
      * }
      */
-    public function crawl_batch(array $urls, $offset = 0, $batch_size = 10) {
+    public function crawl_batch(array $urls, $offset = 0, $batch_size = 20) {
         $slice = array_slice($urls, $offset, $batch_size);
+        if (empty($slice)) {
+            return array(
+                'found_urls'      => array(),
+                'found_filenames' => array(),
+                'errors'          => array(),
+                'fetched'         => 0,
+            );
+        }
+
+        $pages = $this->fetch_pages_parallel($slice);
+
         $found_urls      = array();
         $found_filenames = array();
         $errors          = array();
         $fetched         = 0;
 
-        foreach ($slice as $url) {
-            $response = wp_remote_get($url, array(
-                'timeout'     => 15,
-                'redirection' => 3,
-                'sslverify'   => false,
-                'user-agent'  => 'Hozio-Image-Optimizer/1.0 (frontend scan)',
-            ));
-
-            if (is_wp_error($response)) {
-                $errors[] = array('url' => $url, 'reason' => $response->get_error_message());
+        foreach ($pages as $page) {
+            if (!empty($page['error'])) {
+                $errors[] = array('url' => $page['url'], 'reason' => $page['error']);
                 continue;
             }
-
-            $code = wp_remote_retrieve_response_code($response);
-            if ($code !== 200) {
-                $errors[] = array('url' => $url, 'reason' => 'HTTP ' . $code);
-                continue;
-            }
-
-            $html = wp_remote_retrieve_body($response);
-            if (empty($html)) {
-                $errors[] = array('url' => $url, 'reason' => 'Empty response');
+            if (empty($page['body'])) {
+                $errors[] = array('url' => $page['url'], 'reason' => 'Empty response');
                 continue;
             }
 
             $fetched++;
-            $refs = $this->extract_image_references($html);
+            $refs = $this->extract_image_references($page['body']);
 
             foreach ($refs['urls'] as $u) {
                 $found_urls[$u] = true;
@@ -263,6 +259,102 @@ class Hozio_Image_Optimizer_Frontend_Crawler {
             'errors'          => $errors,
             'fetched'         => $fetched,
         );
+    }
+
+    /**
+     * Fetch many URLs in parallel via curl_multi (~10x faster than sequential).
+     * Falls back to sequential wp_remote_get if curl extension is unavailable.
+     *
+     * @param string[] $urls
+     * @return array[] Each element: {url, body, error, code}
+     */
+    private function fetch_pages_parallel(array $urls) {
+        if (!function_exists('curl_multi_init') || !function_exists('curl_init')) {
+            return $this->fetch_pages_sequential($urls);
+        }
+
+        $multi   = curl_multi_init();
+        $handles = array();
+
+        foreach ($urls as $i => $url) {
+            $ch = curl_init();
+            curl_setopt_array($ch, array(
+                CURLOPT_URL            => $url,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_MAXREDIRS      => 3,
+                CURLOPT_TIMEOUT        => 15,
+                CURLOPT_CONNECTTIMEOUT => 10,
+                CURLOPT_SSL_VERIFYPEER => false,
+                CURLOPT_SSL_VERIFYHOST => 0,
+                CURLOPT_USERAGENT      => 'Hozio-Image-Optimizer/1.0 (frontend scan)',
+                CURLOPT_ENCODING       => '',
+            ));
+            curl_multi_add_handle($multi, $ch);
+            $handles[$i] = array('handle' => $ch, 'url' => $url);
+        }
+
+        $running = null;
+        do {
+            $status = curl_multi_exec($multi, $running);
+            if ($running) {
+                curl_multi_select($multi, 1.0);
+            }
+        } while ($running > 0 && $status === CURLM_OK);
+
+        $results = array();
+        foreach ($handles as $info) {
+            $ch   = $info['handle'];
+            $body = curl_multi_getcontent($ch);
+            $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $err  = curl_error($ch);
+
+            $entry = array('url' => $info['url'], 'body' => '', 'code' => $code, 'error' => '');
+            if ($err !== '') {
+                $entry['error'] = $err;
+            } elseif ($code !== 200) {
+                $entry['error'] = 'HTTP ' . $code;
+            } else {
+                $entry['body'] = (string) $body;
+            }
+
+            $results[] = $entry;
+            curl_multi_remove_handle($multi, $ch);
+            curl_close($ch);
+        }
+
+        curl_multi_close($multi);
+        return $results;
+    }
+
+    /**
+     * Sequential fallback for environments without curl_multi.
+     */
+    private function fetch_pages_sequential(array $urls) {
+        $results = array();
+        foreach ($urls as $url) {
+            $response = wp_remote_get($url, array(
+                'timeout'     => 15,
+                'redirection' => 3,
+                'sslverify'   => false,
+                'user-agent'  => 'Hozio-Image-Optimizer/1.0 (frontend scan)',
+            ));
+
+            $entry = array('url' => $url, 'body' => '', 'code' => 0, 'error' => '');
+            if (is_wp_error($response)) {
+                $entry['error'] = $response->get_error_message();
+            } else {
+                $code = wp_remote_retrieve_response_code($response);
+                $entry['code'] = $code;
+                if ($code !== 200) {
+                    $entry['error'] = 'HTTP ' . $code;
+                } else {
+                    $entry['body'] = wp_remote_retrieve_body($response);
+                }
+            }
+            $results[] = $entry;
+        }
+        return $results;
     }
 
     /**
