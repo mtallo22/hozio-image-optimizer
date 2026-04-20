@@ -374,15 +374,65 @@ class Hozio_Image_Optimizer_Unused_Detector {
         }
         $term_json_ids = array_intersect_key($term_json_ids, $all_ids_set);
 
+        // 10. WordPress core options that store a single attachment ID as their value.
+        // These never match the REGEXP or blob checks because the value is a bare integer,
+        // so we pull them explicitly to avoid flagging the site icon / custom logo as unused.
+        $core_option_ids = $this->get_core_option_attachment_ids();
+        $core_option_ids = array_intersect_key($core_option_ids, $all_ids_set);
+
         // Combined O(1) "used by ID" map — only contains actual attachment IDs
         $used_by_id = $featured + $woo + $meta_int + $term_int
-                    + $meta_json_ids + $opts_json_ids + $term_json_ids;
+                    + $meta_json_ids + $opts_json_ids + $term_json_ids
+                    + $core_option_ids;
 
         return array(
             'urls'       => $urls,
             'protected'  => $protected,
             'used_by_id' => $used_by_id,
         );
+    }
+
+    /**
+     * Collect attachment IDs referenced by WordPress core and common theme
+     * options that store an ID as a bare integer (not JSON-quoted).
+     *
+     * Covers:
+     * - `site_icon`          → Appearance → Customize → Site Identity → Site Icon (favicon)
+     * - `theme_mods_*`       → `custom_logo`, `header_image_data`, background image ID
+     * - `page_on_front`      → front-page attachment (very rare but possible)
+     * - `woocommerce_placeholder_image` → WooCommerce placeholder
+     *
+     * @return array Hash map of attachment_id => true.
+     */
+    private function get_core_option_attachment_ids() {
+        $ids = array();
+
+        // 1. Site icon / favicon
+        $site_icon = (int) get_option('site_icon', 0);
+        if ($site_icon > 0) $ids[$site_icon] = true;
+
+        // 2. WooCommerce placeholder image
+        $wc_placeholder = (int) get_option('woocommerce_placeholder_image', 0);
+        if ($wc_placeholder > 0) $ids[$wc_placeholder] = true;
+
+        // 3. Theme mods — custom_logo, header_image_data, background image ID
+        $current_theme = get_stylesheet();
+        $theme_mods = get_option('theme_mods_' . $current_theme, array());
+        if (is_array($theme_mods)) {
+            if (!empty($theme_mods['custom_logo'])) {
+                $ids[(int) $theme_mods['custom_logo']] = true;
+            }
+            if (!empty($theme_mods['background_image']) && is_numeric($theme_mods['background_image'])) {
+                $ids[(int) $theme_mods['background_image']] = true;
+            }
+            if (!empty($theme_mods['header_image_data']) && is_object($theme_mods['header_image_data'])) {
+                $hid = isset($theme_mods['header_image_data']->attachment_id) ? (int) $theme_mods['header_image_data']->attachment_id : 0;
+                if ($hid > 0) $ids[$hid] = true;
+            }
+        }
+
+        // 4. Allow other plugins to register additional attachment-ID options
+        return apply_filters('hozio_used_attachment_ids_from_options', $ids);
     }
 
     /**
