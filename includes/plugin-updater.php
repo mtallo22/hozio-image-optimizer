@@ -100,22 +100,41 @@ class Hozio_ImgOpt_Updater {
         return true;
     }
 
-    private function get_github_release() {
-        $cached = get_transient($this->cache_key);
-        if ($cached !== false) return $cached;
+    private function get_github_release($force = false) {
+        if (!$force) {
+            $cached = get_transient($this->cache_key);
+            if ($cached !== false) return $cached;
+        }
 
+        $data = $this->fetch_github_release_fresh();
+        if ($data) {
+            set_transient($this->cache_key, $data, $this->cache_expiry);
+            update_option('hozio_imgopt_last_update_check', time());
+        }
+        return $data ?: false;
+    }
+
+    /**
+     * Always-fresh GitHub release fetch — bypasses every transient and object
+     * cache. Used by force_update_check so "Check Now" works even on hosts
+     * with persistent object caches that don't invalidate cached reads after
+     * a transient delete.
+     */
+    private function fetch_github_release_fresh() {
         $url = sprintf(
-            'https://api.github.com/repos/%s/%s/releases/latest',
+            'https://api.github.com/repos/%s/%s/releases/latest?_t=%d',
             $this->github_username,
-            $this->github_repo
+            $this->github_repo,
+            time()
         );
 
         $response = wp_remote_get($url, [
             'headers' => [
-                'Accept'     => 'application/vnd.github.v3+json',
-                'User-Agent' => 'WordPress/' . get_bloginfo('version') . '; ' . home_url()
+                'Accept'        => 'application/vnd.github.v3+json',
+                'User-Agent'    => 'WordPress/' . get_bloginfo('version') . '; ' . home_url(),
+                'Cache-Control' => 'no-cache',
             ],
-            'timeout' => 10
+            'timeout' => 10,
         ]);
 
         if (is_wp_error($response)) return false;
@@ -123,9 +142,6 @@ class Hozio_ImgOpt_Updater {
 
         $data = json_decode(wp_remote_retrieve_body($response));
         if (empty($data) || !isset($data->tag_name)) return false;
-
-        set_transient($this->cache_key, $data, $this->cache_expiry);
-        update_option('hozio_imgopt_last_update_check', time());
 
         return $data;
     }
@@ -254,10 +270,35 @@ class Hozio_ImgOpt_Updater {
         return $links;
     }
 
+    /**
+     * Force a fresh update check that bypasses ALL caches (WP transients AND
+     * the persistent object cache). Returns the fresh release data so callers
+     * can display it immediately without reading back through a possibly-stale
+     * transient.
+     *
+     * @return object|false GitHub release object, or false on failure.
+     */
     public function force_update_check() {
+        // Purge every cache layer
         delete_transient($this->cache_key);
+        wp_cache_delete($this->cache_key, 'transient');
         delete_site_transient('update_plugins');
+        wp_cache_delete('update_plugins', 'site-transient');
+
+        // Refresh the installed-version read from disk (in case of manual update)
+        $this->current_version = $this->get_current_version();
+
+        // Fetch fresh from GitHub, unconditionally
+        $release = $this->fetch_github_release_fresh();
+        if ($release) {
+            set_transient($this->cache_key, $release, $this->cache_expiry);
+            update_option('hozio_imgopt_last_update_check', time());
+        }
+
+        // Rebuild WP's plugin-update transient with the fresh release in hand
         wp_update_plugins();
+
+        return $release ?: false;
     }
 }
 

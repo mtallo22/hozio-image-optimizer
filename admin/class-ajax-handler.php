@@ -2028,17 +2028,21 @@ class Hozio_Image_Optimizer_Ajax_Handler {
         }
 
         global $hozio_imgopt_updater;
-        if ($hozio_imgopt_updater) {
-            $hozio_imgopt_updater->force_update_check();
+        if (!$hozio_imgopt_updater) {
+            wp_send_json_error(array('message' => 'Updater not initialized'));
         }
 
-        // Check if update is available
-        $update_plugins = get_site_transient('update_plugins');
-        $plugin_file = basename(HOZIO_IMAGE_OPTIMIZER_DIR) . '/hozio-image-optimizer.php';
-        $update_available = isset($update_plugins->response[$plugin_file]);
-        $latest_version = $update_available ? $update_plugins->response[$plugin_file]->new_version : HOZIO_IMAGE_OPTIMIZER_VERSION;
+        // Fetch fresh from GitHub — bypasses every cache layer.
+        $release = $hozio_imgopt_updater->force_update_check();
+        if (!$release) {
+            wp_send_json_error(array('message' => 'Could not reach GitHub. Check your server\'s outbound network or try again.'));
+        }
 
-        // Generate WordPress built-in upgrade URL (same pattern as Hozio Pro)
+        $plugin_file      = basename(HOZIO_IMAGE_OPTIMIZER_DIR) . '/hozio-image-optimizer.php';
+        $latest_version   = ltrim($release->tag_name, 'vV');
+        $current_version  = HOZIO_IMAGE_OPTIMIZER_VERSION;
+        $update_available = version_compare($current_version, $latest_version, '<');
+
         $update_url = '';
         if ($update_available) {
             $update_url = wp_nonce_url(
@@ -2049,9 +2053,10 @@ class Hozio_Image_Optimizer_Ajax_Handler {
 
         wp_send_json_success(array(
             'update_available' => $update_available,
-            'latest_version' => $latest_version,
-            'current_version' => HOZIO_IMAGE_OPTIMIZER_VERSION,
-            'update_url' => $update_url,
+            'latest_version'   => $latest_version,
+            'current_version'  => $current_version,
+            'update_url'       => $update_url,
+            'release_url'      => isset($release->html_url) ? $release->html_url : '',
         ));
     }
 

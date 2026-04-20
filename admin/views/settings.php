@@ -2320,15 +2320,16 @@ $system_stats = array(
                                     if (response.data.update_available) {
                                         result.html(
                                             '<div style="padding:10px 14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;display:flex;align-items:center;justify-content:space-between;">' +
-                                            '<span style="font-size:12px;color:#16a34a;font-weight:600;">Update available: v' + response.data.latest_version + '</span>' +
+                                            '<span style="font-size:12px;color:#16a34a;font-weight:600;">Update available: v' + response.data.latest_version + ' (you have v' + response.data.current_version + ')</span>' +
                                             '<a href="' + response.data.update_url + '" class="hz-btn hz-btn-primary" style="font-size:11px;padding:6px 14px;text-decoration:none;">Update Now</a>' +
                                             '</div>'
                                         );
                                     } else {
-                                        result.html('<span style="font-size:11px;color:#16a34a;font-weight:600;">&#10003; You are running the latest version (v<?php echo esc_js(HOZIO_IMAGE_OPTIMIZER_VERSION); ?>)</span>');
+                                        result.html('<span style="font-size:11px;color:#16a34a;font-weight:600;">&#10003; You are running the latest version (v' + response.data.current_version + '). Latest on GitHub: v' + response.data.latest_version + '.</span>');
                                     }
                                 } else {
-                                    result.html('<span style="font-size:11px;color:#ef4444;">Failed to check for updates</span>');
+                                    var msg = (response.data && response.data.message) ? response.data.message : 'Failed to check for updates';
+                                    result.html('<span style="font-size:11px;color:#ef4444;">' + msg + '</span>');
                                 }
                             }).fail(function() {
                                 btn.prop('disabled', false).find('.dashicons').removeClass('spin');
