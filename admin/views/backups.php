@@ -253,6 +253,17 @@ if (class_exists('Hozio_Image_Optimizer_Broken_Detector')) {
                 </label>
             </div>
 
+            <!-- Restore progress bar (hidden until restore starts) -->
+            <div id="restore-progress-wrap" style="display:none; margin: 12px 0;">
+                <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+                    <span id="restore-progress-label" style="font-size:13px; color:#555;"><?php esc_html_e('Restoring…', 'hozio-image-optimizer'); ?></span>
+                    <span id="restore-progress-count" style="font-size:12px; color:#888;"></span>
+                </div>
+                <div style="background:#e0e0e0; border-radius:4px; height:8px; overflow:hidden;">
+                    <div id="restore-progress-bar" style="background:#2271b1; height:100%; width:0%; transition:width .3s;"></div>
+                </div>
+            </div>
+
             <!-- Statistics Cards -->
             <div class="hozio-stats-grid" id="unused-stats">
                 <div class="hozio-stat-card">
@@ -1138,7 +1149,7 @@ jQuery(document).ready(function($) {
         });
     });
 
-    // Restore from ZIP
+    // Restore from ZIP — batched to avoid Cloudflare 100s timeout
     $('#restore-zip-input').on('change', function() {
         var file = this.files[0];
         if (!file) return;
@@ -1148,38 +1159,89 @@ jQuery(document).ready(function($) {
             return;
         }
 
+        var btn          = $('#restore-zip-btn');
+        var originalHtml = btn.html();
+        var totalRestored = 0;
+        var totalFailed   = 0;
+
+        btn.html('<span class="dashicons dashicons-update spin"></span> <?php echo esc_js(__('Uploading…', 'hozio-image-optimizer')); ?>').prop('disabled', true);
+        $('#restore-progress-wrap').show();
+        $('#restore-progress-bar').css('width', '0%');
+        $('#restore-progress-count').text('');
+
+        // Phase 1: upload ZIP and start session
         var formData = new FormData();
-        formData.append('action', 'hozio_restore_from_zip');
+        formData.append('action', 'hozio_restore_zip_start');
         formData.append('nonce', hozioImageOptimizer.nonce);
         formData.append('archive', file);
 
-        var btn = $('#restore-zip-btn');
-        var originalHtml = btn.html();
-        btn.html('<span class="dashicons dashicons-update spin"></span> <?php echo esc_js(__('Restoring...', 'hozio-image-optimizer')); ?>');
-
         $.ajax({
-            url: ajaxurl,
-            type: 'POST',
-            data: formData,
-            processData: false,
-            contentType: false,
+            url: ajaxurl, type: 'POST', data: formData,
+            processData: false, contentType: false,
             success: function(response) {
-                btn.html(originalHtml);
-                $('#restore-zip-input').val('');
-
-                if (response.success) {
-                    alert('<?php echo esc_js(__('Restored', 'hozio-image-optimizer')); ?> ' + response.data.restored_count + ' <?php echo esc_js(__('images successfully!', 'hozio-image-optimizer')); ?>');
-                    location.reload();
-                } else {
-                    alert(response.data.message || '<?php echo esc_js(__('Error restoring images', 'hozio-image-optimizer')); ?>');
+                if (!response.success) {
+                    btn.html(originalHtml).prop('disabled', false);
+                    $('#restore-progress-wrap').hide();
+                    $('#restore-zip-input').val('');
+                    alert(response.data.message || '<?php echo esc_js(__('Error starting restore', 'hozio-image-optimizer')); ?>');
+                    return;
                 }
+                var token = response.data.token;
+                var total = response.data.total;
+                btn.html('<span class="dashicons dashicons-update spin"></span> <?php echo esc_js(__('Restoring…', 'hozio-image-optimizer')); ?>');
+                restoreBatch(token, 0, total);
             },
             error: function() {
-                btn.html(originalHtml);
+                btn.html(originalHtml).prop('disabled', false);
+                $('#restore-progress-wrap').hide();
                 $('#restore-zip-input').val('');
-                alert('<?php echo esc_js(__('Error restoring images', 'hozio-image-optimizer')); ?>');
+                alert('<?php echo esc_js(__('Error uploading ZIP', 'hozio-image-optimizer')); ?>');
             }
         });
+
+        // Phase 2: process batches of 20
+        function restoreBatch(token, offset, total) {
+            $.post(ajaxurl, {
+                action:     'hozio_restore_zip_batch',
+                nonce:      hozioImageOptimizer.nonce,
+                token:      token,
+                offset:     offset,
+                batch_size: 20
+            }, function(response) {
+                if (!response.success) {
+                    btn.html(originalHtml).prop('disabled', false);
+                    $('#restore-progress-wrap').hide();
+                    $('#restore-zip-input').val('');
+                    alert(response.data.message || '<?php echo esc_js(__('Error during restore', 'hozio-image-optimizer')); ?>');
+                    return;
+                }
+
+                var data = response.data;
+                totalRestored += data.restored_count;
+                totalFailed   += data.failed_count;
+
+                var pct = total > 0 ? Math.round((data.next_offset / total) * 100) : 100;
+                $('#restore-progress-bar').css('width', pct + '%');
+                $('#restore-progress-count').text(data.next_offset + ' / ' + total);
+
+                if (data.done) {
+                    btn.html(originalHtml).prop('disabled', false);
+                    $('#restore-progress-wrap').hide();
+                    $('#restore-zip-input').val('');
+                    var msg = '<?php echo esc_js(__('Restored', 'hozio-image-optimizer')); ?> ' + totalRestored + ' <?php echo esc_js(__('images successfully!', 'hozio-image-optimizer')); ?>';
+                    if (totalFailed > 0) msg += '\n' + totalFailed + ' <?php echo esc_js(__('images could not be restored.', 'hozio-image-optimizer')); ?>';
+                    alert(msg);
+                    location.reload();
+                } else {
+                    restoreBatch(token, data.next_offset, total);
+                }
+            }).fail(function() {
+                btn.html(originalHtml).prop('disabled', false);
+                $('#restore-progress-wrap').hide();
+                $('#restore-zip-input').val('');
+                alert('<?php echo esc_js(__('Error during restore', 'hozio-image-optimizer')); ?>');
+            });
+        }
     });
 
     // ===== BROKEN IMAGES TAB FUNCTIONALITY =====

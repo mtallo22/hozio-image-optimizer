@@ -245,18 +245,54 @@ class Hozio_Image_Optimizer_Cleanup_Exporter {
     }
 
     /**
-     * Restore images from a ZIP archive created by create_cleanup_archive().
-     *
-     * Reads manifest.json from the ZIP root, restores each image to its original
-     * upload path, creates a new WP attachment record, and updates all ID-based
-     * references (featured images, galleries, ACF/page-builder postmeta, options,
-     * termmeta) from the old attachment ID to the new one so broken frontend
-     * references are healed automatically.
+     * Restore images from a ZIP archive (single-request, legacy path).
+     * For large archives use restore_session_start() + restore_session_batch() instead.
      *
      * @param string $zip_path Path to the uploaded ZIP file.
-     * @return array|WP_Error Restore results or error.
+     * @return array|WP_Error
      */
     public function restore_from_archive($zip_path) {
+        $init = $this->restore_session_start($zip_path);
+        if (is_wp_error($init)) {
+            return $init;
+        }
+
+        $token      = $init['token'];
+        $total      = $init['total'];
+        $batch_size = 20;
+        $offset     = 0;
+        $restored   = array();
+        $failed     = array();
+
+        while ($offset < $total) {
+            $batch = $this->restore_session_batch($token, $offset, $batch_size);
+            if (is_wp_error($batch)) {
+                return $batch;
+            }
+            $restored = array_merge($restored, $batch['restored']);
+            $failed   = array_merge($failed,   $batch['failed']);
+            $offset   = $batch['next_offset'];
+            if ($batch['done']) break;
+        }
+
+        return array(
+            'restored'       => $restored,
+            'failed'         => $failed,
+            'restored_count' => count($restored),
+            'failed_count'   => count($failed),
+        );
+    }
+
+    /**
+     * Start a batched restore session.
+     *
+     * Reads manifest.json from the ZIP and stores the session in a transient.
+     * Returns a token the caller should pass to restore_session_batch().
+     *
+     * @param string $zip_path Path to the uploaded ZIP (must already be on disk).
+     * @return array|WP_Error {token, total} or error.
+     */
+    public function restore_session_start($zip_path) {
         if (!file_exists($zip_path)) {
             return new WP_Error('file_not_found', __('Archive file not found', 'hozio-image-optimizer'));
         }
@@ -271,123 +307,187 @@ class Hozio_Image_Optimizer_Cleanup_Exporter {
         }
 
         $manifest_content = $zip->getFromName('manifest.json');
+        $zip->close();
+
         if (!$manifest_content) {
-            $zip->close();
             return new WP_Error('invalid_archive', __('Invalid archive: manifest.json not found', 'hozio-image-optimizer'));
         }
 
         $manifest = json_decode($manifest_content, true);
         if (!$manifest || empty($manifest['images'])) {
-            $zip->close();
             return new WP_Error('invalid_manifest', __('Invalid manifest data', 'hozio-image-optimizer'));
         }
 
-        $upload_dir = wp_upload_dir();
+        $token = 'hozio_restore_' . get_current_user_id() . '_' . uniqid();
+        set_transient($token, array(
+            'zip_path' => $zip_path,
+            'manifest' => $manifest,
+        ), HOUR_IN_SECONDS);
+
+        return array(
+            'token' => $token,
+            'total' => count($manifest['images']),
+        );
+    }
+
+    /**
+     * Process one batch of images from an active restore session.
+     *
+     * @param string $token     Session token from restore_session_start().
+     * @param int    $offset    Number of images already processed.
+     * @param int    $batch_size Images to process in this request.
+     * @return array|WP_Error
+     */
+    public function restore_session_batch($token, $offset, $batch_size = 20) {
+        $session = get_transient($token);
+        if (!$session) {
+            return new WP_Error('session_expired', __('Restore session expired — please re-upload the ZIP.', 'hozio-image-optimizer'));
+        }
+
+        $zip_path = $session['zip_path'];
+        $manifest = $session['manifest'];
+
+        if (!file_exists($zip_path)) {
+            delete_transient($token);
+            return new WP_Error('zip_missing', __('Restore archive not found on server.', 'hozio-image-optimizer'));
+        }
+
+        if (!class_exists('ZipArchive')) {
+            return new WP_Error('no_zip', __('ZipArchive extension is not available', 'hozio-image-optimizer'));
+        }
+
+        $zip = new ZipArchive();
+        if ($zip->open($zip_path) !== true) {
+            return new WP_Error('zip_open_failed', __('Failed to open ZIP archive', 'hozio-image-optimizer'));
+        }
+
         require_once ABSPATH . 'wp-admin/includes/image.php';
+        $upload_dir = wp_upload_dir();
+
+        $images = $manifest['images'];
+        $total  = count($images);
+        $batch  = array_slice($images, $offset, $batch_size);
 
         $restored = array();
         $failed   = array();
 
-        foreach ($manifest['images'] as $image_info) {
-            $old_id       = (int) $image_info['id'];
-            $zip_filename = $image_info['filename'];
-            $orig_name    = $image_info['original_filename'];
-
-            // Determine the restore path using saved relative_path (e.g. "2023/06/image.jpg").
-            // ZIPs created before v1.7.0 won't have this field; fall back to current year/month.
-            if (!empty($image_info['relative_path'])) {
-                $rel_path = $image_info['relative_path'];
+        foreach ($batch as $image_info) {
+            $result = $this->restore_single_image($zip, $image_info, $upload_dir);
+            if (isset($result['error'])) {
+                $failed[] = $result;
             } else {
-                $rel_path = date('Y/m') . '/' . $orig_name;
+                $restored[] = $result;
             }
-
-            $target_dir  = trailingslashit($upload_dir['basedir'] . '/' . dirname($rel_path));
-            $target_name = basename($rel_path);
-            $target_path = $target_dir . $target_name;
-
-            if (!file_exists($target_dir)) {
-                wp_mkdir_p($target_dir);
-            }
-
-            // If original file path is already occupied, append -restored-N suffix.
-            if (file_exists($target_path)) {
-                $pi      = pathinfo($target_name);
-                $counter = 1;
-                do {
-                    $target_name = $pi['filename'] . '-restored-' . $counter . '.' . $pi['extension'];
-                    $target_path = $target_dir . $target_name;
-                    $rel_path    = dirname($rel_path) . '/' . $target_name;
-                    $counter++;
-                } while (file_exists($target_path));
-            }
-
-            // Extract file from ZIP root.
-            $file_content = $zip->getFromName($zip_filename);
-            if ($file_content === false) {
-                $failed[] = array('id' => $old_id, 'filename' => $zip_filename, 'reason' => 'Not found in archive');
-                continue;
-            }
-
-            if (file_put_contents($target_path, $file_content) === false) {
-                $failed[] = array('id' => $old_id, 'filename' => $zip_filename, 'reason' => 'Write failed');
-                continue;
-            }
-
-            // Security: ensure the extracted file is a valid image.
-            $image_check = @getimagesize($target_path);
-            if (!$image_check) {
-                @unlink($target_path);
-                $failed[] = array('id' => $old_id, 'filename' => $zip_filename, 'reason' => 'Not a valid image');
-                continue;
-            }
-
-            // Create the WP attachment post.
-            $title = pathinfo($orig_name, PATHINFO_FILENAME);
-            $guid  = $upload_dir['baseurl'] . '/' . ltrim($rel_path, '/');
-
-            $new_id = wp_insert_attachment(array(
-                'post_title'     => $title,
-                'post_mime_type' => $image_check['mime'],
-                'post_status'    => 'inherit',
-                'guid'           => $guid,
-            ), $target_path);
-
-            if (is_wp_error($new_id)) {
-                @unlink($target_path);
-                $failed[] = array('id' => $old_id, 'filename' => $zip_filename, 'reason' => $new_id->get_error_message());
-                continue;
-            }
-
-            update_post_meta($new_id, '_wp_attached_file', $rel_path);
-
-            $attach_meta = wp_generate_attachment_metadata($new_id, $target_path);
-            wp_update_attachment_metadata($new_id, $attach_meta);
-
-            if (!empty($image_info['alt_text'])) {
-                update_post_meta($new_id, '_wp_attachment_image_alt', sanitize_text_field($image_info['alt_text']));
-            }
-
-            // Heal all broken ID references on the frontend.
-            if ($old_id !== $new_id) {
-                $this->update_id_references($old_id, $new_id);
-            }
-
-            $restored[] = array(
-                'original_id' => $old_id,
-                'new_id'      => $new_id,
-                'filename'    => $target_name,
-                'url'         => $guid,
-            );
         }
 
         $zip->close();
-        @unlink($zip_path);
+
+        $next_offset = $offset + count($batch);
+        $done        = $next_offset >= $total;
+
+        if ($done) {
+            @unlink($zip_path);
+            delete_transient($token);
+        }
 
         return array(
+            'done'           => $done,
             'restored'       => $restored,
             'failed'         => $failed,
             'restored_count' => count($restored),
             'failed_count'   => count($failed),
+            'next_offset'    => $next_offset,
+            'total'          => $total,
+        );
+    }
+
+    /**
+     * Restore a single image from an open ZipArchive to the uploads directory.
+     *
+     * @param ZipArchive $zip        Open archive.
+     * @param array      $image_info Entry from manifest['images'].
+     * @param array      $upload_dir wp_upload_dir() result.
+     * @return array {original_id, new_id, filename, url} or {error, id, filename, reason}.
+     */
+    private function restore_single_image($zip, $image_info, $upload_dir) {
+        $old_id       = (int) $image_info['id'];
+        $zip_filename = $image_info['filename'];
+        $orig_name    = $image_info['original_filename'];
+
+        // Restore to original path if available (v1.7.0+ ZIPs); fall back to current month.
+        if (!empty($image_info['relative_path'])) {
+            $rel_path = $image_info['relative_path'];
+        } else {
+            $rel_path = date('Y/m') . '/' . $orig_name;
+        }
+
+        $target_dir  = trailingslashit($upload_dir['basedir'] . '/' . dirname($rel_path));
+        $target_name = basename($rel_path);
+        $target_path = $target_dir . $target_name;
+
+        if (!file_exists($target_dir)) {
+            wp_mkdir_p($target_dir);
+        }
+
+        if (file_exists($target_path)) {
+            $pi      = pathinfo($target_name);
+            $counter = 1;
+            do {
+                $target_name = $pi['filename'] . '-restored-' . $counter . '.' . $pi['extension'];
+                $target_path = $target_dir . $target_name;
+                $rel_path    = dirname($rel_path) . '/' . $target_name;
+                $counter++;
+            } while (file_exists($target_path));
+        }
+
+        $file_content = $zip->getFromName($zip_filename);
+        if ($file_content === false) {
+            return array('error' => true, 'id' => $old_id, 'filename' => $zip_filename, 'reason' => 'Not found in archive');
+        }
+
+        if (file_put_contents($target_path, $file_content) === false) {
+            return array('error' => true, 'id' => $old_id, 'filename' => $zip_filename, 'reason' => 'Write failed');
+        }
+
+        $image_check = @getimagesize($target_path);
+        if (!$image_check) {
+            @unlink($target_path);
+            return array('error' => true, 'id' => $old_id, 'filename' => $zip_filename, 'reason' => 'Not a valid image');
+        }
+
+        $title = pathinfo($orig_name, PATHINFO_FILENAME);
+        $guid  = $upload_dir['baseurl'] . '/' . ltrim($rel_path, '/');
+
+        $new_id = wp_insert_attachment(array(
+            'post_title'     => $title,
+            'post_mime_type' => $image_check['mime'],
+            'post_status'    => 'inherit',
+            'guid'           => $guid,
+        ), $target_path);
+
+        if (is_wp_error($new_id)) {
+            @unlink($target_path);
+            return array('error' => true, 'id' => $old_id, 'filename' => $zip_filename, 'reason' => $new_id->get_error_message());
+        }
+
+        update_post_meta($new_id, '_wp_attached_file', $rel_path);
+
+        $attach_meta = wp_generate_attachment_metadata($new_id, $target_path);
+        wp_update_attachment_metadata($new_id, $attach_meta);
+
+        if (!empty($image_info['alt_text'])) {
+            update_post_meta($new_id, '_wp_attachment_image_alt', sanitize_text_field($image_info['alt_text']));
+        }
+
+        if ($old_id !== $new_id) {
+            $this->update_id_references($old_id, $new_id);
+        }
+
+        return array(
+            'original_id' => $old_id,
+            'new_id'      => $new_id,
+            'filename'    => $target_name,
+            'url'         => $guid,
         );
     }
 

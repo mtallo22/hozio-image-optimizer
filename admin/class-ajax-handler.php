@@ -65,6 +65,8 @@ class Hozio_Image_Optimizer_Ajax_Handler {
         add_action('wp_ajax_hozio_download_unused_images', array($this, 'download_unused_images'));
         add_action('wp_ajax_hozio_serve_temp_zip', array($this, 'serve_temp_zip'));
         add_action('wp_ajax_hozio_restore_from_zip', array($this, 'restore_from_zip'));
+        add_action('wp_ajax_hozio_restore_zip_start', array($this, 'restore_zip_start'));
+        add_action('wp_ajax_hozio_restore_zip_batch', array($this, 'restore_zip_batch'));
         add_action('wp_ajax_hozio_toggle_image_protection', array($this, 'toggle_image_protection'));
         add_action('wp_ajax_hozio_get_image_references', array($this, 'get_image_references'));
 
@@ -1705,6 +1707,72 @@ class Hozio_Image_Optimizer_Ajax_Handler {
 
         // Restore from archive
         $result = $exporter->restore_from_archive($temp_path);
+
+        if (is_wp_error($result)) {
+            wp_send_json_error(array('message' => $result->get_error_message()));
+        }
+
+        wp_send_json_success($result);
+    }
+
+    /**
+     * Start a batched restore session: accept ZIP upload, read manifest, return token.
+     */
+    public function restore_zip_start() {
+        $this->verify_request();
+
+        if (!current_user_can('upload_files')) {
+            wp_send_json_error(array('message' => __('Insufficient permissions', 'hozio-image-optimizer')));
+        }
+
+        if (empty($_FILES['archive']) || $_FILES['archive']['error'] !== UPLOAD_ERR_OK) {
+            wp_send_json_error(array('message' => __('No file uploaded or upload error', 'hozio-image-optimizer')));
+        }
+
+        $file_type = wp_check_filetype($_FILES['archive']['name']);
+        if ($file_type['ext'] !== 'zip') {
+            wp_send_json_error(array('message' => __('Please upload a ZIP file', 'hozio-image-optimizer')));
+        }
+
+        $exporter  = new Hozio_Image_Optimizer_Cleanup_Exporter();
+        $temp_path = $exporter->get_temp_path('restore-' . time() . '-' . get_current_user_id() . '.zip');
+
+        if (!move_uploaded_file($_FILES['archive']['tmp_name'], $temp_path)) {
+            wp_send_json_error(array('message' => __('Failed to process uploaded file', 'hozio-image-optimizer')));
+        }
+
+        $result = $exporter->restore_session_start($temp_path);
+
+        if (is_wp_error($result)) {
+            @unlink($temp_path);
+            wp_send_json_error(array('message' => $result->get_error_message()));
+        }
+
+        wp_send_json_success($result);
+    }
+
+    /**
+     * Process one batch from an active restore session.
+     */
+    public function restore_zip_batch() {
+        $this->verify_request();
+
+        if (!current_user_can('upload_files')) {
+            wp_send_json_error(array('message' => __('Insufficient permissions', 'hozio-image-optimizer')));
+        }
+
+        $token      = isset($_POST['token'])       ? sanitize_text_field($_POST['token']) : '';
+        $offset     = isset($_POST['offset'])      ? intval($_POST['offset'])              : 0;
+        $batch_size = isset($_POST['batch_size'])  ? intval($_POST['batch_size'])          : 20;
+
+        if (!$token) {
+            wp_send_json_error(array('message' => __('Missing restore session token', 'hozio-image-optimizer')));
+        }
+
+        set_time_limit(90);
+
+        $exporter = new Hozio_Image_Optimizer_Cleanup_Exporter();
+        $result   = $exporter->restore_session_batch($token, $offset, $batch_size);
 
         if (is_wp_error($result)) {
             wp_send_json_error(array('message' => $result->get_error_message()));

@@ -228,9 +228,18 @@ class Hozio_Image_Optimizer_Unused_Detector {
              WHERE meta_value REGEXP '^[0-9]+$' AND meta_value != '0'"
         )), true);
 
+        // Build a lookup set of all known attachment IDs so we can filter out integers
+        // that happen to appear in non-image contexts (view counts, layout numbers, etc.)
+        $all_ids_set = array_fill_keys($all_ids, true);
+
+        // Filter meta_int and term_int to only actual attachment IDs to avoid false negatives
+        // from unrelated integers stored in postmeta (e.g. view_count, quantity fields).
+        $meta_int = array_intersect_key($meta_int, $all_ids_set);
+        $term_int = array_intersect_key($term_int, $all_ids_set);
+
         // 7. JSON-quoted IDs in non-private postmeta (ACF, page builders, etc.)
-        // These are values like {"image_id":"123"} that don't contain the uploads URL,
-        // so they aren't caught by meta_blob but ARE referenced by image ID.
+        // Values like {"image_id":"123"} that don't contain the uploads URL.
+        // Intersect with $all_ids_set so random JSON integers ({"columns":"3"}) are ignored.
         $meta_json_rows = $this->wpdb->get_col(
             "SELECT meta_value FROM {$this->wpdb->postmeta}
              WHERE meta_key NOT LIKE '\\_%%'
@@ -245,6 +254,7 @@ class Hozio_Image_Optimizer_Unused_Detector {
                 $meta_json_ids[(int) $id] = true;
             }
         }
+        $meta_json_ids = array_intersect_key($meta_json_ids, $all_ids_set);
 
         // 8. JSON-quoted IDs in non-transient options (widgets, customizer, etc.)
         $opts_json_rows = $this->wpdb->get_col(
@@ -260,6 +270,7 @@ class Hozio_Image_Optimizer_Unused_Detector {
                 $opts_json_ids[(int) $id] = true;
             }
         }
+        $opts_json_ids = array_intersect_key($opts_json_ids, $all_ids_set);
 
         // 9. JSON-quoted IDs in termmeta (rare but possible in some category plugins)
         $term_json_rows = $this->wpdb->get_col(
@@ -273,8 +284,9 @@ class Hozio_Image_Optimizer_Unused_Detector {
                 $term_json_ids[(int) $id] = true;
             }
         }
+        $term_json_ids = array_intersect_key($term_json_ids, $all_ids_set);
 
-        // Combined O(1) "used by ID" map — covers all ways an image ID can be stored
+        // Combined O(1) "used by ID" map — only contains actual attachment IDs
         $used_by_id = $featured + $woo + $meta_int + $term_int
                     + $meta_json_ids + $opts_json_ids + $term_json_ids;
 
