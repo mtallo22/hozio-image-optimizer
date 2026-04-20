@@ -63,6 +63,7 @@ class Hozio_Image_Optimizer_Ajax_Handler {
         add_action('wp_ajax_hozio_scan_unused_images', array($this, 'scan_unused_images'));
         add_action('wp_ajax_hozio_delete_unused_images', array($this, 'delete_unused_images'));
         add_action('wp_ajax_hozio_download_unused_images', array($this, 'download_unused_images'));
+        add_action('wp_ajax_hozio_serve_temp_zip', array($this, 'serve_temp_zip'));
         add_action('wp_ajax_hozio_restore_from_zip', array($this, 'restore_from_zip'));
         add_action('wp_ajax_hozio_toggle_image_protection', array($this, 'toggle_image_protection'));
         add_action('wp_ajax_hozio_get_image_references', array($this, 'get_image_references'));
@@ -1569,22 +1570,87 @@ class Hozio_Image_Optimizer_Ajax_Handler {
             wp_send_json_error(array('message' => __('No images selected', 'hozio-image-optimizer')));
         }
 
+        // Zipping many images can take a while
+        @set_time_limit(300);
+        @ini_set('memory_limit', '256M');
+
         $exporter = new Hozio_Image_Optimizer_Cleanup_Exporter();
-        $archive = $exporter->create_cleanup_archive($image_ids);
+        $archive  = $exporter->create_cleanup_archive($image_ids);
+
+        if (is_wp_error($archive)) {
+            wp_send_json_error(array('message' => $archive->get_error_message()));
+            return;
+        }
 
         if (!$archive || !isset($archive['path'])) {
             wp_send_json_error(array('message' => __('Failed to create ZIP archive', 'hozio-image-optimizer')));
+            return;
         }
 
-        // Schedule cleanup of the temp ZIP after 1 hour
-        wp_schedule_single_event(time() + 3600, 'hozio_cleanup_temp_zip', array($archive['path']));
+        // Store path in a one-time transient so serve_temp_zip() can stream it
+        // through PHP — the temp directory is .htaccess-protected from direct access.
+        $token = wp_generate_password(32, false);
+        set_transient('hozio_zip_' . $token, $archive['path'], HOUR_IN_SECONDS);
+
+        $download_url = add_query_arg(array(
+            'action' => 'hozio_serve_temp_zip',
+            'token'  => $token,
+            'nonce'  => wp_create_nonce('hozio_serve_zip'),
+        ), admin_url('admin-ajax.php'));
 
         wp_send_json_success(array(
-            'download_url' => str_replace(ABSPATH, site_url('/'), $archive['path']),
-            'filename' => $archive['filename'] ?? 'unused-images.zip',
-            'size' => $archive['size'] ?? 0,
-            'image_count' => count($image_ids),
+            'download_url' => $download_url,
+            'filename'     => isset($archive['filename']) ? $archive['filename'] : 'unused-images.zip',
+            'size'         => isset($archive['size']) ? $archive['size'] : 0,
+            'image_count'  => count($image_ids),
         ));
+    }
+
+    /**
+     * Stream a previously created temp ZIP to the browser.
+     * Uses a one-time token so the .htaccess-protected temp directory
+     * never needs to be publicly accessible.
+     */
+    public function serve_temp_zip() {
+        if (!isset($_GET['nonce']) || !wp_verify_nonce(sanitize_text_field(wp_unslash($_GET['nonce'])), 'hozio_serve_zip')) {
+            wp_die(__('Invalid or expired download link.', 'hozio-image-optimizer'));
+        }
+
+        if (!current_user_can('upload_files')) {
+            wp_die(__('Insufficient permissions.', 'hozio-image-optimizer'));
+        }
+
+        $token = isset($_GET['token']) ? sanitize_key($_GET['token']) : '';
+        if (!$token) {
+            wp_die(__('Missing download token.', 'hozio-image-optimizer'));
+        }
+
+        $archive_path = get_transient('hozio_zip_' . $token);
+        delete_transient('hozio_zip_' . $token); // one-time use
+
+        if (!$archive_path || !file_exists($archive_path)) {
+            wp_die(__('Download link has expired or the file was not found. Please generate the ZIP again.', 'hozio-image-optimizer'));
+        }
+
+        $filename  = basename($archive_path);
+        $file_size = filesize($archive_path);
+
+        while (ob_get_level()) {
+            ob_end_clean();
+        }
+
+        header('Content-Type: application/zip');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        header('Content-Length: ' . $file_size);
+        header('Cache-Control: no-store, no-cache, must-revalidate');
+        header('Pragma: no-cache');
+
+        readfile($archive_path);
+
+        // Schedule cleanup — file still needed until this request finishes
+        wp_schedule_single_event(time() + 3600, 'hozio_cleanup_temp_zip', array($archive_path));
+
+        exit;
     }
 
     /**
