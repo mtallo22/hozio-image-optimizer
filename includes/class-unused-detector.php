@@ -86,38 +86,40 @@ class Hozio_Image_Optimizer_Unused_Detector {
      * @return array Progress/result data.
      */
     public function scan_batch($batch_offset = 0, $batch_size = 300) {
-        $user_id   = get_current_user_id();
-        $ids_key   = 'hozio_scan_ids_'   . $user_id;
-        $acc_key   = 'hozio_scan_acc_'   . $user_id;
-        $data_key  = 'hozio_scan_data_'  . $user_id;
-        $blobs_key = 'hozio_scan_blobs_' . $user_id;
+        $user_id  = get_current_user_id();
+        $ids_key  = 'hozio_scan_ids_'  . $user_id;
+        $acc_key  = 'hozio_scan_acc_'  . $user_id;
+        $data_key = 'hozio_scan_data_' . $user_id;
 
         if ($batch_offset === 0) {
             // Wipe any stale transients from a previous aborted scan before starting fresh.
             $this->clear_scan_data($user_id);
 
-            $all_ids = (new WP_Query(array(
-                'post_type'      => 'attachment',
-                'post_mime_type' => array('image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/avif'),
-                'post_status'    => 'inherit',
-                'posts_per_page' => -1,
-                'fields'         => 'ids',
-            )))->posts;
+            $all_ids = array_values(array_unique((new WP_Query(array(
+                'post_type'        => 'attachment',
+                'post_mime_type'   => array('image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/avif'),
+                'post_status'      => 'inherit',
+                'posts_per_page'   => -1,
+                'fields'           => 'ids',
+                'suppress_filters' => true,
+            )))->posts));
 
             set_transient($ids_key, $all_ids, HOUR_IN_SECONDS);
-            set_transient($acc_key, array(), HOUR_IN_SECONDS);
+            set_transient($acc_key, array(),  HOUR_IN_SECONDS);
 
-            list($ids_cache, $blobs_cache) = $this->preload_scan_data($all_ids);
-            set_transient($data_key,  $ids_cache,   HOUR_IN_SECONDS);
-            set_transient($blobs_key, $blobs_cache, HOUR_IN_SECONDS);
+            $ids_cache = $this->preload_id_maps($all_ids);
+            set_transient($data_key, $ids_cache, HOUR_IN_SECONDS);
         } else {
-            $all_ids     = get_transient($ids_key);
-            $ids_cache   = get_transient($data_key);
-            $blobs_cache = get_transient($blobs_key);
-            if ($all_ids === false || $ids_cache === false || $blobs_cache === false) {
+            $all_ids   = get_transient($ids_key);
+            $ids_cache = get_transient($data_key);
+            if ($all_ids === false || $ids_cache === false) {
                 return array('error' => __('Scan session expired — please restart the scan.', 'hozio-image-optimizer'));
             }
         }
+
+        // Reload URL blobs fresh from DB every batch — avoids transient size/corruption issues
+        // that caused inconsistent results when blobs were cached across requests.
+        $blobs_cache = $this->load_url_blobs();
 
         $total_ids   = count($all_ids);
         $batch       = array_slice($all_ids, $batch_offset, $batch_size);
@@ -155,12 +157,14 @@ class Hozio_Image_Optimizer_Unused_Detector {
     }
 
     /**
-     * Pre-load all image reference data in bulk so per-image checks need zero DB queries.
+     * Pre-load all ID-based reference hash maps.
+     * Stored in a transient and reused across batches.
+     * Does NOT include URL blob data — those are fetched fresh per batch via load_url_blobs().
      *
      * @param array $all_ids All attachment IDs being scanned.
-     * @return array Two-element array: [$ids_cache, $blobs_cache]
+     * @return array ids_cache: {urls, protected, used_by_id}
      */
-    private function preload_scan_data(array $all_ids) {
+    private function preload_id_maps(array $all_ids) {
         $upload_dir  = wp_upload_dir();
         $base_url    = trailingslashit($upload_dir['baseurl']);
         $uploads_esc = $this->wpdb->esc_like($upload_dir['baseurl']);
@@ -290,7 +294,24 @@ class Hozio_Image_Optimizer_Unused_Detector {
         $used_by_id = $featured + $woo + $meta_int + $term_int
                     + $meta_json_ids + $opts_json_ids + $term_json_ids;
 
-        // 10. Post content blob (posts referencing uploads by URL)
+        return array(
+            'urls'       => $urls,
+            'protected'  => $protected,
+            'used_by_id' => $used_by_id,
+        );
+    }
+
+    /**
+     * Fetch URL-reference blobs fresh from the database.
+     * Called on every batch (not cached) so results are always current and not
+     * subject to transient size limits or object-cache corruption.
+     *
+     * @return array {content, meta, opts, terms} — each a concatenated string.
+     */
+    private function load_url_blobs() {
+        $upload_dir  = wp_upload_dir();
+        $uploads_esc = $this->wpdb->esc_like($upload_dir['baseurl']);
+
         $content_rows = $this->wpdb->get_col($this->wpdb->prepare(
             "SELECT post_content FROM {$this->wpdb->posts}
              WHERE post_type NOT IN ('revision', 'attachment', 'nav_menu_item')
@@ -298,10 +319,8 @@ class Hozio_Image_Optimizer_Unused_Detector {
              AND post_content LIKE %s",
             '%' . $uploads_esc . '%'
         ));
-        $content_blob = implode(' ', $content_rows);
 
-        // 11. Postmeta URL blob (custom fields referencing uploads by URL)
-        $meta_url_rows = $this->wpdb->get_col($this->wpdb->prepare(
+        $meta_rows = $this->wpdb->get_col($this->wpdb->prepare(
             "SELECT meta_value FROM {$this->wpdb->postmeta}
              WHERE meta_key NOT LIKE '\\_%%'
              AND meta_key != '_thumbnail_id'
@@ -309,9 +328,7 @@ class Hozio_Image_Optimizer_Unused_Detector {
              AND meta_value LIKE %s",
             '%' . $uploads_esc . '%'
         ));
-        $meta_blob = implode(' ', $meta_url_rows);
 
-        // 12. Options URL blob (widget/theme settings referencing uploads by URL)
         $opts_rows = $this->wpdb->get_col($this->wpdb->prepare(
             "SELECT option_value FROM {$this->wpdb->options}
              WHERE option_name NOT LIKE '\_transient%'
@@ -319,34 +336,23 @@ class Hozio_Image_Optimizer_Unused_Detector {
              AND option_value LIKE %s",
             '%' . $uploads_esc . '%'
         ));
-        $opts_blob = implode(' ', $opts_rows);
 
-        // 13. Termmeta URL blob (category image URLs)
         $terms_rows = $this->wpdb->get_col($this->wpdb->prepare(
             "SELECT meta_value FROM {$this->wpdb->termmeta}
              WHERE meta_value LIKE %s",
             '%' . $uploads_esc . '%'
         ));
-        $terms_blob = implode(' ', $terms_rows);
 
         return array(
-            array(
-                'urls'       => $urls,
-                'protected'  => $protected,
-                'used_by_id' => $used_by_id,
-            ),
-            array(
-                'content' => $content_blob,
-                'meta'    => $meta_blob,
-                'opts'    => $opts_blob,
-                'terms'   => $terms_blob,
-            ),
+            'content' => implode(' ', $content_rows),
+            'meta'    => implode(' ', $meta_rows),
+            'opts'    => implode(' ', $opts_rows),
+            'terms'   => implode(' ', $terms_rows),
         );
     }
 
     /**
-     * Check if an image is unused using only pre-loaded in-memory data.
-     * Zero DB queries — all lookups are PHP strpos() or isset().
+     * Check if an image is unused using pre-loaded hash maps + fresh URL blobs.
      *
      * @param int   $attachment_id
      * @param array $ids_cache   Hash maps: urls, protected, used_by_id.
@@ -409,10 +415,9 @@ class Hozio_Image_Optimizer_Unused_Detector {
      * @param int $user_id
      */
     private function clear_scan_data($user_id) {
-        delete_transient('hozio_scan_ids_'   . $user_id);
-        delete_transient('hozio_scan_acc_'   . $user_id);
-        delete_transient('hozio_scan_data_'  . $user_id);
-        delete_transient('hozio_scan_blobs_' . $user_id);
+        delete_transient('hozio_scan_ids_'  . $user_id);
+        delete_transient('hozio_scan_acc_'  . $user_id);
+        delete_transient('hozio_scan_data_' . $user_id);
     }
 
     /**

@@ -470,6 +470,9 @@ if (class_exists('Hozio_Image_Optimizer_Broken_Detector')) {
                 <button type="button" class="unused-protect-btn protect-btn {{#is_protected}}active{{/is_protected}}" data-id="{{id}}" title="<?php esc_attr_e('Protect', 'hozio-image-optimizer'); ?>">
                     <span class="dashicons dashicons-shield"></span>
                 </button>
+                <button type="button" class="unused-refs-btn" data-id="{{id}}" title="<?php esc_attr_e('Check why this is unused', 'hozio-image-optimizer'); ?>" style="background:none;border:1px solid #cbd5e1;border-radius:4px;padding:3px 7px;cursor:pointer;font-size:11px;color:#64748b;">
+                    <?php esc_html_e('Why unused?', 'hozio-image-optimizer'); ?>
+                </button>
                 <button type="button" class="unused-delete-btn delete-single-btn" data-id="{{id}}">
                     <span class="dashicons dashicons-trash"></span> <?php esc_html_e('Delete', 'hozio-image-optimizer'); ?>
                 </button>
@@ -1009,6 +1012,38 @@ jQuery(document).ready(function($) {
         deleteImages(ids);
     });
 
+    // "Why unused?" — show where (or confirm nowhere) this image is referenced
+    $(document).on('click', '.unused-refs-btn', function(e) {
+        e.stopPropagation();
+        var $btn = $(this);
+        var id   = $btn.data('id');
+
+        $btn.text('<?php echo esc_js(__('Checking…', 'hozio-image-optimizer')); ?>').prop('disabled', true);
+
+        $.post(ajaxurl, {
+            action: 'hozio_get_image_references',
+            nonce:  hozioImageOptimizer.nonce,
+            attachment_id: id
+        }, function(response) {
+            $btn.text('<?php echo esc_js(__('Why unused?', 'hozio-image-optimizer')); ?>').prop('disabled', false);
+
+            var refs = (response.success && response.data && response.data.references)
+                ? response.data.references : [];
+
+            var msg;
+            if (refs.length === 0) {
+                msg = '<?php echo esc_js(__('No references found — this image does not appear in any post content, featured images, galleries, options, or term meta.', 'hozio-image-optimizer')); ?>';
+            } else {
+                msg = '<?php echo esc_js(__('Found references (image may be used):', 'hozio-image-optimizer')); ?>\n';
+                refs.forEach(function(r) { msg += '\n• ' + r.location + ' (' + r.type + ')'; });
+            }
+            alert(msg);
+        }).fail(function() {
+            $btn.text('<?php echo esc_js(__('Why unused?', 'hozio-image-optimizer')); ?>').prop('disabled', false);
+            alert('<?php echo esc_js(__('Could not check references.', 'hozio-image-optimizer')); ?>');
+        });
+    });
+
     // Delete single image
     $(document).on('click', '.delete-single-btn', function() {
         var id = $(this).data('id');
@@ -1112,7 +1147,7 @@ jQuery(document).ready(function($) {
     // Toggle protection
     // Click anywhere on unused card to toggle checkbox
     $(document).on('click', '.unused-item', function(e) {
-        if ($(e.target).is('input') || $(e.target).closest('.protect-btn, .delete-single-btn, .view-refs-btn').length) return;
+        if ($(e.target).is('input') || $(e.target).closest('.protect-btn, .delete-single-btn, .unused-refs-btn').length) return;
         var $cb = $(this).find('.unused-checkbox');
         $cb.prop('checked', !$cb.is(':checked')).trigger('change');
     });
