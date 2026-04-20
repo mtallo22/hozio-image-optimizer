@@ -1488,22 +1488,26 @@ class Hozio_Image_Optimizer_Ajax_Handler {
             wp_send_json_error(array('message' => __('Insufficient permissions', 'hozio-image-optimizer')));
         }
 
-        // Scanning runs 6 SQL queries per image and can take a long time on large sites.
-        @set_time_limit(300);
+        @set_time_limit(120);
         @ini_set('memory_limit', '256M');
 
-        $page = isset($_POST['page']) ? intval($_POST['page']) : 1;
-        $per_page = isset($_POST['per_page']) ? intval($_POST['per_page']) : 50;
+        $batch_offset = isset($_POST['batch_offset']) ? intval($_POST['batch_offset']) : 0;
+        $batch_size   = isset($_POST['batch_size'])   ? intval($_POST['batch_size'])   : 50;
 
         try {
             $detector = new Hozio_Image_Optimizer_Unused_Detector();
-            $results = $detector->scan_all_images($page, $per_page);
+            $results  = $detector->scan_batch($batch_offset, $batch_size);
 
-            // Persist results in database so they survive page navigation
-            $detector->save_scan_results($results);
+            if (isset($results['error'])) {
+                wp_send_json_error(array('message' => $results['error']));
+                return;
+            }
 
-            $stats = $detector->get_stats();
-            $results['stats'] = $stats;
+            // On final batch, persist results and attach stats
+            if ($results['done']) {
+                $detector->save_scan_results($results);
+                $results['stats'] = $detector->get_stats();
+            }
 
             wp_send_json_success($results);
         } catch (Exception $e) {

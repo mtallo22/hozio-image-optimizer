@@ -73,6 +73,76 @@ class Hozio_Image_Optimizer_Unused_Detector {
     }
 
     /**
+     * Scan a batch of images, accumulating results across multiple requests.
+     * On the first call (batch_offset=0) all image IDs are fetched and cached
+     * in a transient. Subsequent calls read from that cache so each request
+     * only processes $batch_size images, keeping well under Cloudflare's 100s
+     * gateway timeout.
+     *
+     * @param int $batch_offset Number of images already scanned.
+     * @param int $batch_size   Images to scan in this request.
+     * @return array Progress/result data.
+     */
+    public function scan_batch($batch_offset = 0, $batch_size = 50) {
+        $user_id     = get_current_user_id();
+        $ids_key     = 'hozio_scan_ids_' . $user_id;
+        $acc_key     = 'hozio_scan_acc_' . $user_id;
+
+        if ($batch_offset === 0) {
+            $args = array(
+                'post_type'      => 'attachment',
+                'post_mime_type' => array('image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/avif'),
+                'post_status'    => 'inherit',
+                'posts_per_page' => -1,
+                'fields'         => 'ids',
+            );
+            $all_ids = (new WP_Query($args))->posts;
+            set_transient($ids_key, $all_ids, HOUR_IN_SECONDS);
+            set_transient($acc_key, array(), HOUR_IN_SECONDS);
+        } else {
+            $all_ids = get_transient($ids_key);
+            if ($all_ids === false) {
+                return array('error' => __('Scan session expired — please restart the scan.', 'hozio-image-optimizer'));
+            }
+        }
+
+        $total_ids   = count($all_ids);
+        $batch       = array_slice($all_ids, $batch_offset, $batch_size);
+        $accumulated = get_transient($acc_key) ?: array();
+
+        foreach ($batch as $attachment_id) {
+            if ($this->is_image_unused($attachment_id)) {
+                $accumulated[] = $this->get_image_data($attachment_id);
+            }
+        }
+        set_transient($acc_key, $accumulated, HOUR_IN_SECONDS);
+
+        $next_offset = $batch_offset + count($batch);
+        $done        = $next_offset >= $total_ids;
+
+        $response = array(
+            'done'        => $done,
+            'total_ids'   => $total_ids,
+            'scanned'     => $next_offset,
+            'next_offset' => $next_offset,
+        );
+
+        if ($done) {
+            usort($accumulated, function($a, $b) {
+                return $b['file_size'] - $a['file_size'];
+            });
+            $response['images']     = $accumulated;
+            $response['total']      = count($accumulated);
+            $response['total_size'] = array_sum(array_column($accumulated, 'file_size'));
+
+            delete_transient($ids_key);
+            delete_transient($acc_key);
+        }
+
+        return $response;
+    }
+
+    /**
      * Check if an image is unused (not referenced anywhere)
      *
      * @param int $attachment_id The attachment ID

@@ -808,38 +808,7 @@ jQuery(document).ready(function($) {
     })();
     <?php endif; ?>
 
-    // Simulated progress for unused-image scan
-    var unusedScanTimer = null;
-    var unusedScanPct   = 0;
-    var unusedScanLabels = [
-        '<?php echo esc_js(__('Indexing attachments…', 'hozio-image-optimizer')); ?>',
-        '<?php echo esc_js(__('Checking post content…', 'hozio-image-optimizer')); ?>',
-        '<?php echo esc_js(__('Scanning widgets &amp; menus…', 'hozio-image-optimizer')); ?>',
-        '<?php echo esc_js(__('Cross-referencing files…', 'hozio-image-optimizer')); ?>',
-        '<?php echo esc_js(__('Almost done…', 'hozio-image-optimizer')); ?>'
-    ];
-    function startUnusedScanProgress() {
-        unusedScanPct = 0;
-        $('#unused-scan-progress-fill').css('width', '0%');
-        $('#unused-scan-progress-label').text(unusedScanLabels[0]);
-        unusedScanTimer = setInterval(function() {
-            unusedScanPct += (88 - unusedScanPct) * 0.04;
-            $('#unused-scan-progress-fill').css('width', unusedScanPct.toFixed(1) + '%');
-            var labelIdx = Math.min(Math.floor(unusedScanPct / 20), unusedScanLabels.length - 1);
-            $('#unused-scan-progress-label').text(unusedScanLabels[labelIdx]);
-        }, 120);
-    }
-    function finishUnusedScanProgress(cb) {
-        clearInterval(unusedScanTimer);
-        $('#unused-scan-progress-fill').css('width', '100%');
-        $('#unused-scan-progress-label').text('<?php echo esc_js(__('Done!', 'hozio-image-optimizer')); ?>');
-        setTimeout(function() {
-            $('#unused-scan-progress-fill').css('width', '0%');
-            if (cb) { cb(); }
-        }, 400);
-    }
-
-    // Scan for unused images
+    // Scan for unused images — batched to avoid Cloudflare's 100s gateway timeout
     $('#scan-unused-btn').on('click', function() {
         var btn = $(this);
         var originalHtml = btn.html();
@@ -851,44 +820,65 @@ jQuery(document).ready(function($) {
         $('#unused-clean-state').hide();
         $('#unused-results-grid').hide();
         $('#unused-scanning-state').show();
-        startUnusedScanProgress();
+        $('#unused-scan-progress-fill').css('width', '0%');
+        $('#unused-scan-progress-label').text('<?php echo esc_js(__('Indexing attachments…', 'hozio-image-optimizer')); ?>');
 
-        $.post(ajaxurl, {
-            action: 'hozio_scan_unused_images',
-            nonce: hozioImageOptimizer.nonce
-        }, function(response) {
-            btn.prop('disabled', false).html(originalHtml);
-            finishUnusedScanProgress(function() {
-                $('#unused-scanning-state').hide();
+        function scanBatch(offset) {
+            $.post(ajaxurl, {
+                action: 'hozio_scan_unused_images',
+                nonce: hozioImageOptimizer.nonce,
+                batch_offset: offset,
+                batch_size: 50
+            }, function(response) {
+                if (!response.success) {
+                    btn.prop('disabled', false).html(originalHtml);
+                    $('#unused-scanning-state').hide();
+                    $('#unused-initial-state').show();
+                    alert(response.data.message || '<?php echo esc_js(__('Error scanning images', 'hozio-image-optimizer')); ?>');
+                    return;
+                }
 
-                if (response.success) {
-                    unusedImages = response.data.images;
+                var data = response.data;
+                var pct  = data.total_ids > 0 ? Math.min(Math.round((data.scanned / data.total_ids) * 100), 99) : 0;
+                $('#unused-scan-progress-fill').css('width', pct + '%');
+                $('#unused-scan-progress-label').text('<?php echo esc_js(__('Scanning…', 'hozio-image-optimizer')); ?> ' + data.scanned + ' / ' + data.total_ids);
 
-                    // Update stats
-                    $('#stat-unused-count').text(response.data.total);
-                    $('#stat-potential-savings').text(formatBytes(response.data.total_size));
-                    $('#stat-protected').text(response.data.stats.protected_count);
+                if (!data.done) {
+                    scanBatch(data.next_offset);
+                    return;
+                }
 
-                    if (response.data.total === 0) {
+                // Final batch — show results
+                $('#unused-scan-progress-fill').css('width', '100%');
+                $('#unused-scan-progress-label').text('<?php echo esc_js(__('Done!', 'hozio-image-optimizer')); ?>');
+
+                setTimeout(function() {
+                    btn.prop('disabled', false).html(originalHtml);
+                    $('#unused-scanning-state').hide();
+
+                    unusedImages = data.images;
+                    $('#stat-unused-count').text(data.total);
+                    $('#stat-potential-savings').text(formatBytes(data.total_size));
+                    $('#stat-protected').text(data.stats ? data.stats.protected_count : 0);
+
+                    if (data.total === 0) {
                         $('#unused-clean-state').show();
                         $('#unused-bulk-actions').hide();
                     } else {
-                        renderUnusedImages(response.data.images);
+                        renderUnusedImages(data.images);
                         $('#unused-results-grid').show();
                         $('#unused-bulk-actions').show();
                     }
-                } else {
-                    alert(response.data.message || '<?php echo esc_js(__('Error scanning images', 'hozio-image-optimizer')); ?>');
-                    $('#unused-initial-state').show();
-                }
+                }, 400);
+            }).fail(function() {
+                btn.prop('disabled', false).html(originalHtml);
+                $('#unused-scanning-state').hide();
+                $('#unused-initial-state').show();
+                alert('<?php echo esc_js(__('Error scanning images', 'hozio-image-optimizer')); ?>');
             });
-        }).fail(function() {
-            btn.prop('disabled', false).html(originalHtml);
-            clearInterval(unusedScanTimer);
-            $('#unused-scanning-state').hide();
-            $('#unused-initial-state').show();
-            alert('<?php echo esc_js(__('Error scanning images', 'hozio-image-optimizer')); ?>');
-        });
+        }
+
+        scanBatch(0);
     });
 
     function renderUnusedImages(images) {
