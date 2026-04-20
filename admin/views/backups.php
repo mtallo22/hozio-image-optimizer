@@ -972,7 +972,7 @@ jQuery(document).ready(function($) {
         $.post(ajaxurl, {
             action: 'hozio_delete_unused_images',
             nonce: hozioImageOptimizer.nonce,
-            image_ids: ids
+            image_ids: ids.join(',')
         }, function(response) {
             btn.prop('disabled', false);
             btn.find('.dashicons').removeClass('dashicons-update spin').addClass('dashicons-trash');
@@ -1031,7 +1031,7 @@ jQuery(document).ready(function($) {
         $.post(ajaxurl, {
             action: 'hozio_download_unused_images',
             nonce: hozioImageOptimizer.nonce,
-            image_ids: ids
+            image_ids: ids.join(',')
         }, function(response) {
             btn.prop('disabled', false);
             btn.find('.dashicons').removeClass('dashicons-update spin').addClass('dashicons-download');

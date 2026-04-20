@@ -1528,7 +1528,9 @@ class Hozio_Image_Optimizer_Ajax_Handler {
             wp_send_json_error(array('message' => __('Insufficient permissions', 'hozio-image-optimizer')));
         }
 
-        $image_ids = isset($_POST['image_ids']) ? array_map('intval', (array) $_POST['image_ids']) : array();
+        $image_ids = isset($_POST['image_ids'])
+            ? array_values(array_filter(array_map('intval', explode(',', sanitize_text_field(wp_unslash($_POST['image_ids']))))))
+            : array();
         if (empty($image_ids)) {
             wp_send_json_error(array('message' => __('No images selected', 'hozio-image-optimizer')));
         }
@@ -1565,7 +1567,9 @@ class Hozio_Image_Optimizer_Ajax_Handler {
             wp_send_json_error(array('message' => __('Insufficient permissions', 'hozio-image-optimizer')));
         }
 
-        $image_ids = isset($_POST['image_ids']) ? array_map('intval', (array) $_POST['image_ids']) : array();
+        $image_ids = isset($_POST['image_ids'])
+            ? array_values(array_filter(array_map('intval', explode(',', sanitize_text_field(wp_unslash($_POST['image_ids']))))))
+            : array();
         if (empty($image_ids)) {
             wp_send_json_error(array('message' => __('No images selected', 'hozio-image-optimizer')));
         }
