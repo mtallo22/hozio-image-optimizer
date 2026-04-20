@@ -144,6 +144,73 @@ class Hozio_Image_Optimizer_Unused_Detector {
     }
 
     /**
+     * One-shot, single-request, fully-deterministic unused scan.
+     *
+     * All heavy work (preload hash maps + URL blobs + attachment loop) happens
+     * inside one PHP request, so there are no cross-request transient races
+     * and no chance of different batches seeing different DB snapshots.
+     *
+     * Takes an optional frontend-used set (from the crawler). If provided,
+     * any image found on the frontend is excluded from the unused list —
+     * even if the DB check would have flagged it. This is the safety net
+     * against false positives from database-only heuristics.
+     *
+     * @param array $used_urls      List of URLs seen on the frontend.
+     * @param array $used_filenames List of normalized filenames seen on the frontend.
+     * @return array {images, total, total_size, stats}
+     */
+    public function scan_final(array $used_urls = array(), array $used_filenames = array()) {
+        @set_time_limit(300);
+
+        $all_ids = $this->get_all_attachment_ids();
+        if (empty($all_ids)) {
+            return array(
+                'images'     => array(),
+                'total'      => 0,
+                'total_size' => 0,
+                'stats'      => $this->get_stats(),
+            );
+        }
+
+        $ids_cache   = $this->preload_id_maps($all_ids);
+        $blobs_cache = $this->load_url_blobs();
+
+        // Pre-compute frontend lookup hashes (O(1) membership test)
+        $used_urls_lookup  = array_fill_keys($used_urls, true);
+        $used_files_lookup = array_fill_keys($used_filenames, true);
+        $has_frontend_data = !empty($used_urls_lookup) || !empty($used_files_lookup);
+
+        $crawler = $has_frontend_data ? new Hozio_Image_Optimizer_Frontend_Crawler() : null;
+
+        $unused = array();
+        foreach ($all_ids as $attachment_id) {
+            // DB check first (fast)
+            if (!$this->is_image_unused_fast($attachment_id, $ids_cache, $blobs_cache)) {
+                continue;
+            }
+
+            // Frontend safety net: if crawl data is available and this image
+            // appears anywhere on the frontend, it is NOT unused regardless
+            // of what the DB said.
+            if ($crawler && $crawler->attachment_is_used($attachment_id, $used_urls_lookup, $used_files_lookup)) {
+                continue;
+            }
+
+            $unused[] = $this->get_image_data($attachment_id);
+        }
+
+        // Sort biggest-savings first
+        usort($unused, function($a, $b) { return $b['file_size'] - $a['file_size']; });
+
+        return array(
+            'images'     => $unused,
+            'total'      => count($unused),
+            'total_size' => array_sum(array_column($unused, 'file_size')),
+            'stats'      => $this->get_stats(),
+        );
+    }
+
+    /**
      * Filter a list of DB-candidate unused images by checking them against a
      * frontend-used URL/filename lookup set. Returns only images that do NOT
      * appear anywhere in the crawled frontend HTML.

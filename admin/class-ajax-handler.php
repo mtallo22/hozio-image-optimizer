@@ -75,6 +75,10 @@ class Hozio_Image_Optimizer_Ajax_Handler {
         add_action('wp_ajax_hozio_crawl_batch', array($this, 'crawl_batch'));
         add_action('wp_ajax_hozio_verify_unused_candidates', array($this, 'verify_unused_candidates'));
         add_action('wp_ajax_hozio_verify_single_image', array($this, 'verify_single_image'));
+        add_action('wp_ajax_hozio_crawl_cache_status', array($this, 'crawl_cache_status'));
+        add_action('wp_ajax_hozio_crawl_cache_clear', array($this, 'crawl_cache_clear'));
+        add_action('wp_ajax_hozio_crawl_cache_finalize', array($this, 'crawl_cache_finalize'));
+        add_action('wp_ajax_hozio_scan_final', array($this, 'scan_final'));
 
         // Broken image detection
         add_action('wp_ajax_hozio_scan_broken_images', array($this, 'scan_broken_images'));
@@ -1931,6 +1935,102 @@ class Hozio_Image_Optimizer_Ajax_Handler {
             'truly_unused_count' => count($result['truly_unused']),
             'rescued_count'      => count($result['rescued']),
         ));
+    }
+
+    /**
+     * Report whether a valid crawl cache exists and how old it is.
+     */
+    public function crawl_cache_status() {
+        $this->verify_request();
+        if (!current_user_can('upload_files')) {
+            wp_send_json_error(array('message' => 'Insufficient permissions'));
+        }
+
+        $crawler = new Hozio_Image_Optimizer_Frontend_Crawler();
+        $cache   = $crawler->get_cached_data();
+
+        wp_send_json_success(array(
+            'has_cache'      => (bool) $cache,
+            'age_seconds'    => $cache ? $cache['age_seconds'] : null,
+            'pages_crawled'  => $cache ? $cache['pages_crawled'] : 0,
+            'url_count'      => $cache ? count($cache['used_urls']) : 0,
+            'filename_count' => $cache ? count($cache['used_filenames']) : 0,
+        ));
+    }
+
+    /**
+     * Delete the crawl cache so the next scan re-crawls.
+     */
+    public function crawl_cache_clear() {
+        $this->verify_request();
+        if (!current_user_can('upload_files')) {
+            wp_send_json_error(array('message' => 'Insufficient permissions'));
+        }
+        (new Hozio_Image_Optimizer_Frontend_Crawler())->clear_cache();
+        wp_send_json_success();
+    }
+
+    /**
+     * Persist a fresh crawl set (assembled client-side from crawl_batch calls)
+     * into the DB cache so subsequent scans can skip crawling.
+     */
+    public function crawl_cache_finalize() {
+        $this->verify_request();
+        if (!current_user_can('upload_files')) {
+            wp_send_json_error(array('message' => 'Insufficient permissions'));
+        }
+
+        $urls_json  = isset($_POST['used_urls']) ? wp_unslash($_POST['used_urls']) : '[]';
+        $files_json = isset($_POST['used_filenames']) ? wp_unslash($_POST['used_filenames']) : '[]';
+        $pages      = isset($_POST['pages_crawled']) ? intval($_POST['pages_crawled']) : 0;
+
+        $urls  = json_decode($urls_json, true);
+        $files = json_decode($files_json, true);
+
+        if (!is_array($urls) || !is_array($files)) {
+            wp_send_json_error(array('message' => 'Invalid input'));
+        }
+
+        $crawler = new Hozio_Image_Optimizer_Frontend_Crawler();
+        $crawler->cache_data($urls, $files, $pages);
+
+        wp_send_json_success(array('cached' => true));
+    }
+
+    /**
+     * Unified one-shot scan. Reads the cached crawl set (if any) and runs
+     * the final DB check in a single request. Always deterministic.
+     */
+    public function scan_final() {
+        $this->verify_request();
+        if (!current_user_can('upload_files')) {
+            wp_send_json_error(array('message' => 'Insufficient permissions'));
+        }
+
+        @set_time_limit(300);
+
+        $use_crawl = isset($_POST['use_crawl']) ? (bool) intval($_POST['use_crawl']) : true;
+
+        $used_urls  = array();
+        $used_files = array();
+        $crawl_age  = null;
+
+        if ($use_crawl) {
+            $crawler = new Hozio_Image_Optimizer_Frontend_Crawler();
+            $cache   = $crawler->get_cached_data();
+            if ($cache) {
+                $used_urls  = $cache['used_urls'];
+                $used_files = $cache['used_filenames'];
+                $crawl_age  = $cache['age_seconds'];
+            }
+        }
+
+        $detector = new Hozio_Image_Optimizer_Unused_Detector();
+        $result   = $detector->scan_final($used_urls, $used_files);
+
+        $result['used_crawl_data'] = !empty($used_urls) || !empty($used_files);
+        $result['crawl_age']       = $crawl_age;
+        wp_send_json_success($result);
     }
 
     /**

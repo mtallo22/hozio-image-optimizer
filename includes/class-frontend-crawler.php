@@ -16,6 +16,9 @@ if (!defined('ABSPATH')) {
 
 class Hozio_Image_Optimizer_Frontend_Crawler {
 
+    const CACHE_OPTION = 'hozio_frontend_crawl_cache';
+    const CACHE_TTL    = 3600; // 1 hour
+
     private $wpdb;
     private $upload_baseurl;
     private $upload_basedir;
@@ -26,6 +29,50 @@ class Hozio_Image_Optimizer_Frontend_Crawler {
         $upload = wp_upload_dir();
         $this->upload_baseurl = trailingslashit($upload['baseurl']);
         $this->upload_basedir = trailingslashit($upload['basedir']);
+    }
+
+    /**
+     * Read cached crawl data. Returns null if missing or expired.
+     * Stored in wp_options (not transient) to avoid object-cache staleness.
+     *
+     * @return array|null {timestamp, used_urls, used_filenames, pages_crawled, errors, age_seconds}
+     */
+    public function get_cached_data() {
+        $cache = get_option(self::CACHE_OPTION);
+        if (!is_array($cache) || empty($cache['timestamp'])) {
+            return null;
+        }
+        $age = time() - (int) $cache['timestamp'];
+        if ($age > self::CACHE_TTL) {
+            return null;
+        }
+        $cache['age_seconds'] = $age;
+        return $cache;
+    }
+
+    /**
+     * Write crawl results to the persistent cache.
+     *
+     * @param array $used_urls
+     * @param array $used_filenames
+     * @param int   $pages_crawled
+     * @param array $errors
+     */
+    public function cache_data(array $used_urls, array $used_filenames, $pages_crawled, array $errors = array()) {
+        update_option(self::CACHE_OPTION, array(
+            'timestamp'      => time(),
+            'used_urls'      => array_values(array_unique($used_urls)),
+            'used_filenames' => array_values(array_unique($used_filenames)),
+            'pages_crawled'  => (int) $pages_crawled,
+            'errors'         => $errors,
+        ), false);
+    }
+
+    /**
+     * Invalidate the crawl cache.
+     */
+    public function clear_cache() {
+        delete_option(self::CACHE_OPTION);
     }
 
     /**
@@ -214,7 +261,7 @@ class Hozio_Image_Optimizer_Frontend_Crawler {
      *     @type int   $fetched         Number of URLs successfully fetched.
      * }
      */
-    public function crawl_batch(array $urls, $offset = 0, $batch_size = 20) {
+    public function crawl_batch(array $urls, $offset = 0, $batch_size = 30) {
         $slice = array_slice($urls, $offset, $batch_size);
         if (empty($slice)) {
             return array(
