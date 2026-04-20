@@ -1488,19 +1488,29 @@ class Hozio_Image_Optimizer_Ajax_Handler {
             wp_send_json_error(array('message' => __('Insufficient permissions', 'hozio-image-optimizer')));
         }
 
+        // Scanning runs 6 SQL queries per image and can take a long time on large sites.
+        @set_time_limit(300);
+        @ini_set('memory_limit', '256M');
+
         $page = isset($_POST['page']) ? intval($_POST['page']) : 1;
         $per_page = isset($_POST['per_page']) ? intval($_POST['per_page']) : 50;
 
-        $detector = new Hozio_Image_Optimizer_Unused_Detector();
-        $results = $detector->scan_all_images($page, $per_page);
+        try {
+            $detector = new Hozio_Image_Optimizer_Unused_Detector();
+            $results = $detector->scan_all_images($page, $per_page);
 
-        // Persist results in database so they survive page navigation
-        $detector->save_scan_results($results);
+            // Persist results in database so they survive page navigation
+            $detector->save_scan_results($results);
 
-        $stats = $detector->get_stats();
-        $results['stats'] = $stats;
+            $stats = $detector->get_stats();
+            $results['stats'] = $stats;
 
-        wp_send_json_success($results);
+            wp_send_json_success($results);
+        } catch (Exception $e) {
+            wp_send_json_error(array('message' => $e->getMessage()));
+        } catch (Error $e) {
+            wp_send_json_error(array('message' => $e->getMessage()));
+        }
     }
 
     /**
