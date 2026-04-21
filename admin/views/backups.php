@@ -947,6 +947,88 @@ jQuery(document).ready(function($) {
             alert(msg || '<?php echo esc_js(__('Error scanning images', 'hozio-image-optimizer')); ?>');
         }
 
+        // Rich error display with HTTP status, response body preview, and
+        // a Copy button so the user can share the exact failure with support.
+        // Replaces the old generic "Error scanning images" alert.
+        function abortWithError(phase, jqXHR, extraMessage, responseSnippet) {
+            resetUI();
+            $('#unused-initial-state').show();
+
+            var status    = jqXHR ? (jqXHR.status || 0) : 0;
+            var statusTxt = jqXHR ? (jqXHR.statusText || '') : '';
+            var respText  = '';
+            if (jqXHR && typeof jqXHR.responseText === 'string') {
+                respText = jqXHR.responseText.slice(0, 2000);
+            } else if (responseSnippet) {
+                respText = String(responseSnippet).slice(0, 2000);
+            }
+
+            // Interpret common failure modes into actionable text
+            var reason = extraMessage || '';
+            if (!reason) {
+                if (status === 0)   reason = 'Network error or request was blocked (CORS, firewall, or browser cancel).';
+                else if (status === 413) reason = 'Request payload too large — your host is rejecting the POST size.';
+                else if (status === 408 || status === 504 || status === 524) reason = 'Server timed out while processing this request.';
+                else if (status === 502 || status === 503) reason = 'Server is overloaded or restarting (bad gateway / unavailable).';
+                else if (status === 403) reason = 'Request blocked (firewall / security plugin / WAF).';
+                else if (status === 401) reason = 'Session expired — please reload the page and sign in again.';
+                else if (status === 500) reason = 'PHP fatal error on the server. Check wp-content/debug.log if WP_DEBUG_LOG is on.';
+                else if (status >= 400)  reason = 'HTTP ' + status + ' ' + statusTxt;
+                else reason = 'Unknown error';
+            }
+
+            var details =
+                'Phase: ' + phase + '\n' +
+                'HTTP: ' + status + ' ' + statusTxt + '\n' +
+                'Reason: ' + reason + '\n\n' +
+                'Response (first 2000 chars):\n' + (respText || '(empty)');
+
+            var html =
+                '<div id="hozio-scan-error-modal" style="position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:100000;display:flex;align-items:center;justify-content:center;">' +
+                '<div style="background:#fff;max-width:720px;width:94%;max-height:88vh;overflow:auto;padding:22px;border-radius:10px;box-shadow:0 20px 50px rgba(0,0,0,0.35);">' +
+                '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
+                '<h3 style="margin:0;color:#dc2626;"><?php echo esc_js(__('Scan Failed', 'hozio-image-optimizer')); ?></h3>' +
+                '<button type="button" id="hozio-scan-err-close" style="background:none;border:none;font-size:24px;cursor:pointer;color:#64748b;">&times;</button>' +
+                '</div>' +
+                '<div style="background:#fee2e2;border:1px solid #ef4444;color:#991b1b;padding:12px 14px;border-radius:6px;margin-bottom:14px;font-size:13px;">' +
+                '<strong><?php echo esc_js(__('What went wrong:', 'hozio-image-optimizer')); ?></strong> ' + escapeHtml(reason) +
+                '</div>' +
+                '<div style="font-size:12px;color:#64748b;margin-bottom:6px;"><strong><?php echo esc_js(__('Phase:', 'hozio-image-optimizer')); ?></strong> ' + escapeHtml(phase) +
+                ' &nbsp;&nbsp;<strong>HTTP:</strong> ' + status + ' ' + escapeHtml(statusTxt) + '</div>' +
+                '<div style="font-size:12px;color:#64748b;margin-bottom:6px;"><strong><?php echo esc_js(__('Server response (first 2000 chars):', 'hozio-image-optimizer')); ?></strong></div>' +
+                '<pre style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:10px;font-size:11px;max-height:260px;overflow:auto;white-space:pre-wrap;word-break:break-all;">' + escapeHtml(respText || '(empty)') + '</pre>' +
+                '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">' +
+                '<button type="button" class="button" id="hozio-scan-err-copy"><?php echo esc_js(__('Copy details', 'hozio-image-optimizer')); ?></button>' +
+                '<button type="button" class="button button-primary" id="hozio-scan-err-ok"><?php echo esc_js(__('OK', 'hozio-image-optimizer')); ?></button>' +
+                '</div></div></div>';
+
+            $('body').append(html);
+            $('#hozio-scan-err-close, #hozio-scan-err-ok').on('click', function() { $('#hozio-scan-error-modal').remove(); });
+            $('#hozio-scan-err-copy').on('click', function() {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(details).then(function() {
+                        $('#hozio-scan-err-copy').text('<?php echo esc_js(__('Copied!', 'hozio-image-optimizer')); ?>');
+                    });
+                } else {
+                    var ta = document.createElement('textarea');
+                    ta.value = details;
+                    document.body.appendChild(ta);
+                    ta.select();
+                    try { document.execCommand('copy'); } catch (e) {}
+                    document.body.removeChild(ta);
+                    $('#hozio-scan-err-copy').text('<?php echo esc_js(__('Copied!', 'hozio-image-optimizer')); ?>');
+                }
+            });
+
+            if (window.console) console.error('[Hozio] Scan failed', { phase: phase, jqXHR: jqXHR, extra: extraMessage, response: respText });
+        }
+
+        function escapeHtml(s) {
+            return String(s == null ? '' : s)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+
         // Stop button — sets the flag so no further batches are launched.
         // In-flight requests are allowed to complete; their results are ignored.
         $('#stop-scan-btn').off('click').on('click', function() {
@@ -965,9 +1047,10 @@ jQuery(document).ready(function($) {
         setProgress(5, '<?php echo esc_js(__('Checking crawl cache…', 'hozio-image-optimizer')); ?>');
 
         // Step 1: ask the server if a fresh crawl cache exists
-        $.post(ajaxurl, { action: 'hozio_crawl_cache_status', nonce: hozioImageOptimizer.nonce }, function(response) {
+        $.post(ajaxurl, { action: 'hozio_crawl_cache_status', nonce: hozioImageOptimizer.nonce })
+            .done(function(response) {
             if (scanAborted) return;
-            if (!response.success) { abort(response.data && response.data.message); return; }
+            if (!response.success) { abortWithError('cache_status', null, (response.data && response.data.message) || 'cache_status returned success=false', JSON.stringify(response)); return; }
 
             if (response.data.has_cache) {
                 // Fast path: cache is fresh, go straight to final scan
@@ -975,80 +1058,98 @@ jQuery(document).ready(function($) {
                 setProgress(50, '<?php echo esc_js(__('Using frontend scan cached', 'hozio-image-optimizer')); ?> ' + ageMin + '<?php echo esc_js(__('m ago…', 'hozio-image-optimizer')); ?>');
                 runFinalScan();
             } else {
-                // Cold path: need to crawl first
                 setProgress(8, '<?php echo esc_js(__('Discovering frontend pages…', 'hozio-image-optimizer')); ?>');
                 discoverUrls();
             }
-        }).fail(function() { abort(); });
+        })
+        .fail(function(jqXHR) { if (!scanAborted) abortWithError('cache_status', jqXHR); });
 
         // ---- Crawl phase ----
-        var frontendUrls = [];
-        var usedUrlSet = {};
+        var crawlToken      = '';  // server-side URL list key (v1.7.13+)
+        var totalUrlCount   = 0;   // how many URLs the token represents
+        var usedUrlSet      = {};
         var usedFilenameSet = {};
-        var crawlErrors = [];
+        var crawlErrors     = [];
+        var batchFailures   = []; // batches that errored but didn't abort the whole scan
 
         function discoverUrls() {
             if (scanAborted) return;
             setProgress(8, '<?php echo esc_js(__('Planning crawl…', 'hozio-image-optimizer')); ?>');
-            $.post(ajaxurl, { action: 'hozio_crawl_discover', nonce: hozioImageOptimizer.nonce }, function(response) {
-                if (scanAborted) return;
-                if (!response.success) { abort(response.data && response.data.message); return; }
-                frontendUrls = response.data.urls || [];
-                var filteredOut = response.data.filtered_out || 0;
-                var rawTotal    = response.data.total_before_filter || frontendUrls.length;
-                if (!frontendUrls.length) {
-                    runFinalScan();
-                    return;
-                }
-                var summary = frontendUrls.length + ' <?php echo esc_js(__('pages to crawl', 'hozio-image-optimizer')); ?>';
-                if (filteredOut > 0) {
-                    summary += ' (' + filteredOut + ' <?php echo esc_js(__('of', 'hozio-image-optimizer')); ?> ' + rawTotal + ' <?php echo esc_js(__('noise URLs filtered', 'hozio-image-optimizer')); ?>)';
-                }
-                setProgress(10, summary + ' — <?php echo esc_js(__('starting…', 'hozio-image-optimizer')); ?>');
-                crawlAllParallel();
-            }).fail(function() { if (!scanAborted) abort(); });
+            $.post(ajaxurl, { action: 'hozio_crawl_discover', nonce: hozioImageOptimizer.nonce })
+                .done(function(response) {
+                    if (scanAborted) return;
+                    if (!response.success) {
+                        abortWithError('discover', null, (response.data && response.data.message) || 'discover returned success=false', JSON.stringify(response));
+                        return;
+                    }
+                    crawlToken    = response.data.token || '';
+                    totalUrlCount = response.data.total || 0;
+                    var filteredOut = response.data.filtered_out || 0;
+                    var rawTotal    = response.data.total_before_filter || totalUrlCount;
+                    if (!totalUrlCount) {
+                        runFinalScan();
+                        return;
+                    }
+                    var summary = totalUrlCount + ' <?php echo esc_js(__('pages to crawl', 'hozio-image-optimizer')); ?>';
+                    if (filteredOut > 0) {
+                        summary += ' (' + filteredOut + ' <?php echo esc_js(__('of', 'hozio-image-optimizer')); ?> ' + rawTotal + ' <?php echo esc_js(__('noise URLs filtered', 'hozio-image-optimizer')); ?>)';
+                    }
+                    setProgress(10, summary + ' — <?php echo esc_js(__('starting…', 'hozio-image-optimizer')); ?>');
+                    crawlAllParallel();
+                })
+                .fail(function(jqXHR) {
+                    if (!scanAborted) abortWithError('discover', jqXHR);
+                });
         }
 
-        // Parallel crawl — 5 browser batches × 40 server curl_multi =
-        // ~200 HTTP fetches in flight at once. This is fine as a brief burst
-        // since the crawl only runs once and the result is then cached.
+        // Parallel crawl — 5 browser batches × 40 server curl_multi.
+        // v1.7.13+: URLs stored server-side via token, so each POST is tiny.
+        // Per-batch failures no longer abort the entire scan — they're logged
+        // and the remaining batches continue so a single bad page (e.g. a
+        // slow blog post that times out) can't ruin a 3000-page crawl.
         function crawlAllParallel() {
             var BATCH_SIZE  = 40;
             var CONCURRENCY = 5;
-            var total       = frontendUrls.length;
+            var total       = totalUrlCount;
             var nextOffset  = 0;
-            var inFlight    = 0;
             var completed   = 0;
             var pagesDone   = 0;
-            var aborted     = false;
             var totalBatches = Math.ceil(total / BATCH_SIZE);
 
             function launchNext() {
-                if (aborted || scanAborted) return;
+                if (scanAborted) return;
                 if (nextOffset >= total) return;
 
                 var myOffset = nextOffset;
                 nextOffset += BATCH_SIZE;
-                inFlight++;
 
                 $.post(ajaxurl, {
                     action:     'hozio_crawl_batch',
                     nonce:      hozioImageOptimizer.nonce,
-                    urls:       JSON.stringify(frontendUrls),
+                    token:      crawlToken,
                     offset:     myOffset,
                     batch_size: BATCH_SIZE
                 }).done(function(response) {
-                    inFlight--;
-                    if (aborted || scanAborted) return;
+                    if (scanAborted) return;
+
+                    // Soft-fail: log and continue. Only abort if ALL batches fail.
                     if (!response || !response.success) {
-                        aborted = true;
-                        abort(response && response.data && response.data.message);
-                        return;
+                        var errCode = response && response.data && response.data.code;
+                        if (errCode === 'token_missing') {
+                            abortWithError('crawl_batch', null, 'Crawl session expired on the server. Please rescan.', JSON.stringify(response));
+                            return;
+                        }
+                        batchFailures.push({
+                            offset: myOffset,
+                            message: (response && response.data && response.data.message) || 'unknown error',
+                            raw: response
+                        });
+                    } else {
+                        var data = response.data;
+                        (data.found_urls || []).forEach(function(u) { usedUrlSet[u] = true; });
+                        (data.found_filenames || []).forEach(function(f) { usedFilenameSet[f] = true; });
+                        if (data.errors && data.errors.length) crawlErrors = crawlErrors.concat(data.errors);
                     }
-                    var data = response.data;
-                    (data.found_urls || []).forEach(function(u) { usedUrlSet[u] = true; });
-                    (data.found_filenames || []).forEach(function(f) { usedFilenameSet[f] = true; });
-                    if (data.errors && data.errors.length) crawlErrors = crawlErrors.concat(data.errors);
 
                     completed++;
                     pagesDone = Math.min(pagesDone + BATCH_SIZE, total);
@@ -1056,19 +1157,32 @@ jQuery(document).ready(function($) {
                     setProgress(10 + crawlPct, '<?php echo esc_js(__('Crawling pages…', 'hozio-image-optimizer')); ?> ' + pagesDone + ' / ' + total);
 
                     if (completed >= totalBatches) {
+                        // If EVERY batch failed, surface that — otherwise proceed.
+                        if (batchFailures.length === totalBatches) {
+                            abortWithError('crawl_batch', null, 'All ' + totalBatches + ' crawl batches failed', JSON.stringify(batchFailures.slice(0, 3)));
+                            return;
+                        }
                         saveCacheAndScan();
                     } else {
                         launchNext();
                     }
-                }).fail(function() {
-                    inFlight--;
-                    if (aborted || scanAborted) return;
-                    aborted = true;
-                    abort();
+                }).fail(function(jqXHR, textStatus) {
+                    if (scanAborted) return;
+                    batchFailures.push({ offset: myOffset, status: jqXHR && jqXHR.status, textStatus: textStatus });
+                    completed++;
+                    pagesDone = Math.min(pagesDone + BATCH_SIZE, total);
+                    if (completed >= totalBatches) {
+                        if (batchFailures.length === totalBatches) {
+                            abortWithError('crawl_batch', jqXHR, 'All crawl batches failed (network)');
+                            return;
+                        }
+                        saveCacheAndScan();
+                    } else {
+                        launchNext();
+                    }
                 });
             }
 
-            // Kick off initial parallel streams
             for (var i = 0; i < CONCURRENCY && nextOffset < total; i++) {
                 launchNext();
             }
@@ -1080,9 +1194,10 @@ jQuery(document).ready(function($) {
             $.post(ajaxurl, {
                 action:          'hozio_crawl_cache_finalize',
                 nonce:           hozioImageOptimizer.nonce,
+                token:           crawlToken,
                 used_urls:       JSON.stringify(Object.keys(usedUrlSet)),
                 used_filenames:  JSON.stringify(Object.keys(usedFilenameSet)),
-                pages_crawled:   frontendUrls.length
+                pages_crawled:   totalUrlCount
             }).always(function() {
                 if (!scanAborted) runFinalScan();
             });
@@ -1096,9 +1211,13 @@ jQuery(document).ready(function($) {
                 action:    'hozio_scan_final',
                 nonce:     hozioImageOptimizer.nonce,
                 use_crawl: 1
-            }, function(response) {
+            })
+            .done(function(response) {
                 if (scanAborted) return;
-                if (!response.success) { abort(response.data && response.data.message); return; }
+                if (!response.success) {
+                    abortWithError('scan_final', null, (response.data && response.data.message) || 'scan_final returned success=false', JSON.stringify(response).slice(0, 2000));
+                    return;
+                }
 
                 var data = response.data;
                 var images = data.images || [];
@@ -1128,7 +1247,10 @@ jQuery(document).ready(function($) {
                         console.warn('[Hozio] ' + crawlErrors.length + ' page(s) failed to fetch (their images may not be detected):', crawlErrors);
                     }
                 }, 300);
-            }).fail(function() { abort(); });
+            })
+            .fail(function(jqXHR) {
+                if (!scanAborted) abortWithError('scan_final', jqXHR);
+            });
         }
     });
 

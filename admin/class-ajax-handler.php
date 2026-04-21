@@ -1860,11 +1860,21 @@ class Hozio_Image_Optimizer_Ajax_Handler {
         $crawler = new Hozio_Image_Optimizer_Frontend_Crawler();
         $result  = $crawler->discover_urls_detailed();
 
+        // Store the URL list in a short-lived option keyed by a token so
+        // subsequent crawl_batch calls only need to POST {token, offset}
+        // rather than the full 300KB+ JSON array on every batch. Huge sites
+        // (3000+ URLs) were failing on strict POST-size / rate limits.
+        $token = 'hozio_crawl_urls_' . wp_generate_uuid4();
+        set_transient($token, $result['urls'], HOUR_IN_SECONDS);
+
         wp_send_json_success(array(
-            'urls'                => $result['urls'],
+            'token'               => $token,
             'total'               => count($result['urls']),
             'total_before_filter' => $result['total_before_filter'],
             'filtered_out'        => $result['filtered_out'],
+            // Still return urls for backward compatibility with older JS;
+            // v1.7.13+ ignores this and uses the token.
+            'urls'                => $result['urls'],
         ));
     }
 
@@ -1878,23 +1888,36 @@ class Hozio_Image_Optimizer_Ajax_Handler {
             wp_send_json_error(array('message' => __('Insufficient permissions', 'hozio-image-optimizer')));
         }
 
-        // Release the PHP session write lock so parallel AJAX requests from
-        // the browser don't serialize here. WooCommerce and many other
-        // plugins hold this lock open for the full request, which was
-        // capping our effective crawl parallelism at 1.
         if (function_exists('session_id') && session_id()) {
             @session_write_close();
         }
 
         @set_time_limit(90);
 
-        $urls_json  = isset($_POST['urls']) ? wp_unslash($_POST['urls']) : '[]';
-        $urls       = json_decode($urls_json, true);
+        // v1.7.13+: token-based URL lookup. The URL list is stashed server-side
+        // by crawl_discover under a unique transient so that each crawl_batch
+        // POST carries only {token, offset} (~100 bytes) instead of the full
+        // 300KB+ JSON array. Falls back to the old {urls} payload if a token
+        // isn't supplied (keeps backward compat with in-flight sessions).
         $offset     = isset($_POST['offset']) ? intval($_POST['offset']) : 0;
         $batch_size = isset($_POST['batch_size']) ? intval($_POST['batch_size']) : 40;
+        $token      = isset($_POST['token']) ? sanitize_text_field($_POST['token']) : '';
 
-        if (!is_array($urls)) {
-            wp_send_json_error(array('message' => __('Invalid URL list', 'hozio-image-optimizer')));
+        $urls = null;
+        if ($token) {
+            $urls = get_transient($token);
+            if (!is_array($urls)) {
+                wp_send_json_error(array(
+                    'message' => __('Crawl session expired — please rescan.', 'hozio-image-optimizer'),
+                    'code'    => 'token_missing',
+                ));
+            }
+        } else {
+            $urls_json = isset($_POST['urls']) ? wp_unslash($_POST['urls']) : '[]';
+            $urls = json_decode($urls_json, true);
+            if (!is_array($urls)) {
+                wp_send_json_error(array('message' => __('Invalid URL list', 'hozio-image-optimizer')));
+            }
         }
 
         $crawler = new Hozio_Image_Optimizer_Frontend_Crawler();
@@ -2103,6 +2126,7 @@ class Hozio_Image_Optimizer_Ajax_Handler {
         $urls_json  = isset($_POST['used_urls']) ? wp_unslash($_POST['used_urls']) : '[]';
         $files_json = isset($_POST['used_filenames']) ? wp_unslash($_POST['used_filenames']) : '[]';
         $pages      = isset($_POST['pages_crawled']) ? intval($_POST['pages_crawled']) : 0;
+        $token      = isset($_POST['token']) ? sanitize_text_field($_POST['token']) : '';
 
         $urls  = json_decode($urls_json, true);
         $files = json_decode($files_json, true);
@@ -2113,6 +2137,11 @@ class Hozio_Image_Optimizer_Ajax_Handler {
 
         $crawler = new Hozio_Image_Optimizer_Frontend_Crawler();
         $crawler->cache_data($urls, $files, $pages);
+
+        // Release the one-shot URL-list transient created by crawl_discover.
+        if ($token) {
+            delete_transient($token);
+        }
 
         wp_send_json_success(array('cached' => true));
     }
