@@ -75,6 +75,9 @@ class Hozio_Image_Optimizer_Ajax_Handler {
         add_action('wp_ajax_hozio_crawl_batch', array($this, 'crawl_batch'));
         add_action('wp_ajax_hozio_verify_unused_candidates', array($this, 'verify_unused_candidates'));
         add_action('wp_ajax_hozio_verify_single_image', array($this, 'verify_single_image'));
+        add_action('wp_ajax_hozio_restore_history_save', array($this, 'restore_history_save'));
+        add_action('wp_ajax_hozio_restore_history_list', array($this, 'restore_history_list'));
+        add_action('wp_ajax_hozio_restore_history_clear', array($this, 'restore_history_clear'));
         add_action('wp_ajax_hozio_crawl_cache_status', array($this, 'crawl_cache_status'));
         add_action('wp_ajax_hozio_crawl_cache_clear', array($this, 'crawl_cache_clear'));
         add_action('wp_ajax_hozio_crawl_cache_finalize', array($this, 'crawl_cache_finalize'));
@@ -1773,7 +1776,7 @@ class Hozio_Image_Optimizer_Ajax_Handler {
 
         $token      = isset($_POST['token'])       ? sanitize_text_field($_POST['token']) : '';
         $offset     = isset($_POST['offset'])      ? intval($_POST['offset'])              : 0;
-        $batch_size = isset($_POST['batch_size'])  ? intval($_POST['batch_size'])          : 5;
+        $batch_size = isset($_POST['batch_size'])  ? intval($_POST['batch_size'])          : 1;
 
         if (!$token) {
             wp_send_json_error(array('message' => __('Missing restore session token', 'hozio-image-optimizer')));
@@ -1948,6 +1951,110 @@ class Hozio_Image_Optimizer_Ajax_Handler {
             'truly_unused_count' => count($result['truly_unused']),
             'rescued_count'      => count($result['rescued']),
         ));
+    }
+
+    /**
+     * Persist a completed (or stopped) restore run for the restore-history panel.
+     *
+     * Expects:
+     *   restored       (JSON array of {original_id, new_id, filename, thumbnail, id_preserved})
+     *   failed         (JSON array)
+     *   was_aborted    (0|1)
+     *
+     * Stores the most recent 20 entries in wp_options (option name:
+     * hozio_restore_history) so they persist across page reloads.
+     */
+    public function restore_history_save() {
+        $this->verify_request();
+        if (!current_user_can('upload_files')) {
+            wp_send_json_error(array('message' => 'Insufficient permissions'));
+        }
+
+        $restored_json = isset($_POST['restored']) ? wp_unslash($_POST['restored']) : '[]';
+        $failed_json   = isset($_POST['failed'])   ? wp_unslash($_POST['failed'])   : '[]';
+        $was_aborted   = isset($_POST['was_aborted']) ? (bool) intval($_POST['was_aborted']) : false;
+
+        $restored = json_decode($restored_json, true);
+        $failed   = json_decode($failed_json, true);
+        if (!is_array($restored)) $restored = array();
+        if (!is_array($failed))   $failed   = array();
+
+        $preserved = 0;
+        foreach ($restored as $r) {
+            if (!empty($r['id_preserved'])) $preserved++;
+        }
+
+        $entry = array(
+            'id'              => uniqid('restore_', true),
+            'timestamp'       => time(),
+            'user_id'         => get_current_user_id(),
+            'restored_count'  => count($restored),
+            'failed_count'    => count($failed),
+            'preserved_count' => $preserved,
+            'remapped_count'  => count($restored) - $preserved,
+            'was_aborted'     => $was_aborted,
+            'restored'        => $restored,
+            'failed'          => $failed,
+        );
+
+        $history = get_option('hozio_restore_history', array());
+        if (!is_array($history)) $history = array();
+        array_unshift($history, $entry);
+        $history = array_slice($history, 0, 20); // cap
+
+        update_option('hozio_restore_history', $history, false);
+        wp_send_json_success(array('saved' => true, 'id' => $entry['id']));
+    }
+
+    /**
+     * Return the restore-history list (summary only — full items fetched on demand).
+     */
+    public function restore_history_list() {
+        $this->verify_request();
+        if (!current_user_can('upload_files')) {
+            wp_send_json_error(array('message' => 'Insufficient permissions'));
+        }
+
+        $want_detail = isset($_POST['entry_id']) ? sanitize_text_field($_POST['entry_id']) : '';
+        $history = get_option('hozio_restore_history', array());
+        if (!is_array($history)) $history = array();
+
+        if ($want_detail) {
+            foreach ($history as $entry) {
+                if (isset($entry['id']) && $entry['id'] === $want_detail) {
+                    wp_send_json_success(array('entry' => $entry));
+                }
+            }
+            wp_send_json_error(array('message' => 'Entry not found'));
+        }
+
+        // Summary listing
+        $summary = array();
+        foreach ($history as $entry) {
+            $summary[] = array(
+                'id'              => $entry['id'],
+                'timestamp'       => $entry['timestamp'],
+                'restored_count'  => $entry['restored_count'],
+                'failed_count'    => $entry['failed_count'],
+                'preserved_count' => $entry['preserved_count'],
+                'remapped_count'  => $entry['remapped_count'],
+                'was_aborted'     => !empty($entry['was_aborted']),
+            );
+        }
+
+        wp_send_json_success(array('history' => $summary));
+    }
+
+    /**
+     * Delete the whole restore-history log.
+     */
+    public function restore_history_clear() {
+        $this->verify_request();
+        if (!current_user_can('upload_files')) {
+            wp_send_json_error(array('message' => 'Insufficient permissions'));
+        }
+        delete_option('hozio_restore_history');
+        wp_send_json_success();
     }
 
     /**

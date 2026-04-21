@@ -253,15 +253,44 @@ if (class_exists('Hozio_Image_Optimizer_Broken_Detector')) {
                 </label>
             </div>
 
-            <!-- Restore progress bar (hidden until restore starts) -->
-            <div id="restore-progress-wrap" style="display:none; margin: 12px 0;">
-                <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
-                    <span id="restore-progress-label" style="font-size:13px; color:#555;"><?php esc_html_e('Restoring…', 'hozio-image-optimizer'); ?></span>
-                    <span id="restore-progress-count" style="font-size:12px; color:#888;"></span>
+            <!-- Restore progress card (hidden until restore starts) -->
+            <div id="restore-progress-wrap" class="hozio-restore-card" style="display:none;">
+                <div class="hozio-restore-header">
+                    <div class="hozio-restore-icon">
+                        <span class="dashicons dashicons-update spin"></span>
+                    </div>
+                    <div class="hozio-restore-title">
+                        <h4><?php esc_html_e('Restoring images from backup', 'hozio-image-optimizer'); ?></h4>
+                        <div class="hozio-restore-sub" id="restore-progress-label"><?php esc_html_e('Getting ready…', 'hozio-image-optimizer'); ?></div>
+                    </div>
+                    <div class="hozio-restore-percent" id="restore-progress-percent">0%</div>
                 </div>
-                <div style="background:#e0e0e0; border-radius:4px; height:8px; overflow:hidden;">
-                    <div id="restore-progress-bar" style="background:#2271b1; height:100%; width:0%; transition:width .3s;"></div>
+
+                <div class="hozio-restore-bar-track">
+                    <div class="hozio-restore-bar-fill" id="restore-progress-bar"></div>
                 </div>
+
+                <div class="hozio-restore-footer">
+                    <div class="hozio-restore-count" id="restore-progress-count">0 / 0</div>
+                    <div class="hozio-restore-last" id="restore-progress-last"></div>
+                    <button type="button" id="stop-restore-btn" class="hozio-restore-stop">
+                        <span class="dashicons dashicons-no-alt"></span><?php esc_html_e('Stop', 'hozio-image-optimizer'); ?>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Restore history (past restore runs, viewable as modal) -->
+            <div id="restore-history-wrap" class="hozio-restore-history" style="display:none;">
+                <div class="hozio-restore-history-header">
+                    <div>
+                        <h4><?php esc_html_e('Restore History', 'hozio-image-optimizer'); ?></h4>
+                        <p><?php esc_html_e('Past restore runs on this site. Click View to see the image grid from any run.', 'hozio-image-optimizer'); ?></p>
+                    </div>
+                    <button type="button" id="clear-restore-history-btn" class="hozio-restore-history-clear">
+                        <span class="dashicons dashicons-trash"></span><?php esc_html_e('Clear history', 'hozio-image-optimizer'); ?>
+                    </button>
+                </div>
+                <div id="restore-history-list" class="hozio-restore-history-list"></div>
             </div>
 
             <!-- Statistics Cards -->
@@ -369,10 +398,9 @@ if (class_exists('Hozio_Image_Optimizer_Broken_Detector')) {
                             <div class="scan-progress-bar" id="unused-scan-progress-fill"></div>
                         </div>
                         <div class="scan-progress-label" id="unused-scan-progress-label"><?php esc_html_e('Starting scan…', 'hozio-image-optimizer'); ?></div>
-                        <div style="margin-top:16px;">
-                            <button type="button" class="hozio-btn hozio-btn-outline btn-sm" id="stop-scan-btn">
-                                <span class="dashicons dashicons-no-alt"></span>
-                                <?php esc_html_e('Stop', 'hozio-image-optimizer'); ?>
+                        <div style="margin-top:20px;">
+                            <button type="button" id="stop-scan-btn">
+                                <span class="dashicons dashicons-no-alt"></span><?php esc_html_e('Stop scan', 'hozio-image-optimizer'); ?>
                             </button>
                         </div>
                     </div>
@@ -1473,11 +1501,36 @@ jQuery(document).ready(function($) {
         var totalFailed   = 0;
         var allRestored   = []; // all restored items across batches (for modal)
         var allFailed     = []; // all failed items across batches (for modal)
+        var restoreAborted = false;
+
+        // Stop button — same pattern as the scan abort. Set a flag, let any
+        // in-flight AJAX finish (results discarded), don't launch next batch.
+        $('#stop-restore-btn').off('click').on('click', function() {
+            if (!confirm('<?php echo esc_js(__('Stop the restore? Images already restored before you click Stop will remain in the Media Library.', 'hozio-image-optimizer')); ?>')) return;
+            restoreAborted = true;
+            $(this).prop('disabled', true).html('<span class="dashicons dashicons-update spin"></span><?php echo esc_js(__('Stopping…', 'hozio-image-optimizer')); ?>');
+            setTimeout(function() {
+                btn.html(originalHtml).prop('disabled', false);
+                $('#restore-progress-wrap').hide();
+                $('#restore-zip-input').val('');
+                // Still show the post-restore modal with whatever was restored
+                // up to the stop — the user explicitly requested to see them.
+                if (allRestored.length || allFailed.length) {
+                    saveRestoreHistoryEntry(allRestored, allFailed, true);
+                    showRestoreCompleteModal(allRestored, allFailed, true);
+                } else {
+                    alert('<?php echo esc_js(__('Restore cancelled — no images were restored.', 'hozio-image-optimizer')); ?>');
+                }
+            }, 350);
+        });
 
         btn.html('<span class="dashicons dashicons-update spin"></span> <?php echo esc_js(__('Uploading…', 'hozio-image-optimizer')); ?>').prop('disabled', true);
         $('#restore-progress-wrap').show();
         $('#restore-progress-bar').css('width', '0%');
+        $('#restore-progress-percent').text('0%');
         $('#restore-progress-count').text('');
+        $('#restore-progress-last').empty();
+        $('#restore-progress-label').text('<?php echo esc_js(__('Uploading ZIP…', 'hozio-image-optimizer')); ?>');
 
         // Phase 1: upload ZIP and start session
         var formData = new FormData();
@@ -1499,7 +1552,8 @@ jQuery(document).ready(function($) {
                 var token = response.data.token;
                 var total = response.data.total;
                 btn.html('<span class="dashicons dashicons-update spin"></span> <?php echo esc_js(__('Restoring…', 'hozio-image-optimizer')); ?>');
-                $('#restore-progress-label').text('<?php echo esc_js(__('Restoring…', 'hozio-image-optimizer')); ?> 0 / ' + total);
+                $('#restore-progress-label').text('<?php echo esc_js(__('Restoring', 'hozio-image-optimizer')); ?> ' + total + ' <?php echo esc_js(__('images (one at a time)…', 'hozio-image-optimizer')); ?>');
+                $('#restore-progress-count').text('0 / ' + total);
                 restoreBatch(token, 0, total);
             },
             error: function() {
@@ -1510,15 +1564,18 @@ jQuery(document).ready(function($) {
             }
         });
 
-        // Phase 2: process batches (server default is 5 — progress updates every few seconds)
+        // Phase 2: process one image per AJAX round-trip for maximum visibility.
+        // Each response triggers a progress bar move + filename display.
         function restoreBatch(token, offset, total) {
+            if (restoreAborted) return;
             $.post(ajaxurl, {
                 action:     'hozio_restore_zip_batch',
                 nonce:      hozioImageOptimizer.nonce,
                 token:      token,
                 offset:     offset,
-                batch_size: 5
+                batch_size: 1
             }, function(response) {
+                if (restoreAborted) return;
                 if (!response.success) {
                     btn.html(originalHtml).prop('disabled', false);
                     $('#restore-progress-wrap').hide();
@@ -1535,27 +1592,40 @@ jQuery(document).ready(function($) {
 
                 var pct = total > 0 ? Math.round((data.next_offset / total) * 100) : 100;
                 $('#restore-progress-bar').css('width', pct + '%');
+                $('#restore-progress-percent').text(pct + '%');
                 $('#restore-progress-count').text(data.next_offset + ' / ' + total);
+                $('#restore-progress-label').text(
+                    '<?php echo esc_js(__('Restoring', 'hozio-image-optimizer')); ?> ' + total + ' <?php echo esc_js(__('images (one at a time)…', 'hozio-image-optimizer')); ?>'
+                );
 
-                // Show the most recently restored filename + ID status so the
-                // bar visibly moves every few seconds instead of appearing frozen.
+                // Show the most recently restored item as a thumbnail + filename
+                // + ID-status badge, so it's obvious the restore is progressing.
                 var last = (data.restored && data.restored.length) ? data.restored[data.restored.length - 1] : null;
-                var labelText = '<?php echo esc_js(__('Restoring…', 'hozio-image-optimizer')); ?> ' + data.next_offset + ' / ' + total;
                 if (last) {
-                    var marker = last.id_preserved ? ' \u2713' : ' \u21BB';
-                    labelText += marker + ' ' + last.filename;
+                    var badgeClass = last.id_preserved ? 'preserved' : 'remapped';
+                    var badgeText  = last.id_preserved ? 'ID ' + last.new_id + ' preserved' : 'new ID ' + last.new_id;
+                    var icon       = last.id_preserved ? '\u2713' : '\u21BB';
+                    var thumb      = last.thumbnail ? ('<img src="' + last.thumbnail + '" alt="">') : '<span class="hozio-restore-thumb-placeholder"></span>';
+                    $('#restore-progress-last').html(
+                        thumb +
+                        '<div class="hozio-restore-last-meta">' +
+                        '  <div class="hozio-restore-last-name">' + last.filename + '</div>' +
+                        '  <span class="hozio-restore-badge ' + badgeClass + '">' + icon + ' ' + badgeText + '</span>' +
+                        '</div>'
+                    );
                 }
-                $('#restore-progress-label').text(labelText);
 
                 if (data.done) {
                     btn.html(originalHtml).prop('disabled', false);
                     $('#restore-progress-wrap').hide();
                     $('#restore-zip-input').val('');
-                    showRestoreCompleteModal(allRestored, allFailed);
+                    saveRestoreHistoryEntry(allRestored, allFailed, false);
+                    showRestoreCompleteModal(allRestored, allFailed, false);
                 } else {
                     restoreBatch(token, data.next_offset, total);
                 }
             }).fail(function() {
+                if (restoreAborted) return;
                 btn.html(originalHtml).prop('disabled', false);
                 $('#restore-progress-wrap').hide();
                 $('#restore-zip-input').val('');
@@ -1564,18 +1634,104 @@ jQuery(document).ready(function($) {
         }
     });
 
+    // Persist a completed restore run so the history panel can re-open the
+    // same modal later. Called from both the normal-completion and
+    // stop-during-restore paths.
+    function saveRestoreHistoryEntry(restored, failed, wasAborted) {
+        if (!restored.length && !failed.length) return;
+        $.post(ajaxurl, {
+            action:      'hozio_restore_history_save',
+            nonce:       hozioImageOptimizer.nonce,
+            restored:    JSON.stringify(restored),
+            failed:      JSON.stringify(failed),
+            was_aborted: wasAborted ? 1 : 0
+        }, function() {
+            loadRestoreHistory();
+        });
+    }
+
+    // Fetch and render the restore-history list on the page.
+    function loadRestoreHistory() {
+        $.post(ajaxurl, { action: 'hozio_restore_history_list', nonce: hozioImageOptimizer.nonce }, function(response) {
+            if (!response.success) return;
+            var history = (response.data && response.data.history) || [];
+            var $wrap = $('#restore-history-wrap');
+            var $list = $('#restore-history-list');
+
+            if (!history.length) {
+                $list.html('<div class="hozio-restore-history-empty"><?php echo esc_js(__('No past restores yet.', 'hozio-image-optimizer')); ?></div>');
+                $wrap.hide();
+                return;
+            }
+
+            $wrap.show();
+            var html = '';
+            history.forEach(function(h) {
+                var date = new Date(h.timestamp * 1000).toLocaleString();
+                var abortClass = h.was_aborted ? ' aborted' : '';
+                html += '<div class="hozio-restore-history-entry' + abortClass + '">';
+                html += '<div class="hozio-restore-history-meta">';
+                html += '<div class="hozio-restore-history-date">' + date + '</div>';
+                html += '<div class="hozio-restore-history-summary">';
+                html += '<span class="pill ok">' + h.restored_count + ' <?php echo esc_js(__('restored', 'hozio-image-optimizer')); ?></span>';
+                if (h.preserved_count > 0) html += '<span class="pill ok">' + h.preserved_count + ' <?php echo esc_js(__('IDs preserved', 'hozio-image-optimizer')); ?></span>';
+                if (h.remapped_count > 0)  html += '<span class="pill remapped">' + h.remapped_count + ' <?php echo esc_js(__('remapped', 'hozio-image-optimizer')); ?></span>';
+                if (h.failed_count > 0)    html += '<span class="pill failed">' + h.failed_count + ' <?php echo esc_js(__('failed', 'hozio-image-optimizer')); ?></span>';
+                if (h.was_aborted)         html += '<span class="pill aborted"><?php echo esc_js(__('stopped', 'hozio-image-optimizer')); ?></span>';
+                html += '</div></div>';
+                html += '<button type="button" class="hozio-restore-history-view" data-id="' + h.id + '"><?php echo esc_js(__('View', 'hozio-image-optimizer')); ?></button>';
+                html += '</div>';
+            });
+            $list.html(html);
+        });
+    }
+
+    // View a past restore: fetches the full entry and re-opens the modal.
+    $(document).on('click', '.hozio-restore-history-view', function() {
+        var id = $(this).data('id');
+        $.post(ajaxurl, {
+            action:   'hozio_restore_history_list',
+            nonce:    hozioImageOptimizer.nonce,
+            entry_id: id
+        }, function(response) {
+            if (!response.success || !response.data || !response.data.entry) {
+                alert('<?php echo esc_js(__('Could not load that restore.', 'hozio-image-optimizer')); ?>');
+                return;
+            }
+            var e = response.data.entry;
+            showRestoreCompleteModal(e.restored || [], e.failed || [], !!e.was_aborted);
+        });
+    });
+
+    // Clear the entire restore history log.
+    $(document).on('click', '#clear-restore-history-btn', function() {
+        if (!confirm('<?php echo esc_js(__('Delete all restore-history entries? Your actual restored images are NOT affected.', 'hozio-image-optimizer')); ?>')) return;
+        $.post(ajaxurl, { action: 'hozio_restore_history_clear', nonce: hozioImageOptimizer.nonce }, function() {
+            loadRestoreHistory();
+        });
+    });
+
+    // Load history on page ready
+    loadRestoreHistory();
+
     // Post-restore summary modal — shows thumbnails of every restored image,
     // flags which kept their original attachment ID vs were remapped, and
     // lists any failures. No forced page reload.
-    function showRestoreCompleteModal(restored, failed) {
+    function showRestoreCompleteModal(restored, failed, wasAborted) {
         var preservedCount = 0;
         restored.forEach(function(r) { if (r.id_preserved) preservedCount++; });
         var remappedCount = restored.length - preservedCount;
 
         var summary = '';
-        summary += '<div style="background:#d1fae5;border:1px solid #10b981;color:#065f46;padding:10px 14px;border-radius:6px;margin-bottom:10px;font-weight:600;">';
-        summary += '\u2713 ' + restored.length + ' <?php echo esc_js(__('images restored', 'hozio-image-optimizer')); ?>';
-        summary += '</div>';
+        if (wasAborted) {
+            summary += '<div style="background:#fef3c7;border:1px solid #f59e0b;color:#92400e;padding:10px 14px;border-radius:6px;margin-bottom:10px;font-weight:600;">';
+            summary += '\u26A0 <?php echo esc_js(__('Restore stopped.', 'hozio-image-optimizer')); ?> ' + restored.length + ' <?php echo esc_js(__('images were restored before you stopped it.', 'hozio-image-optimizer')); ?>';
+            summary += '</div>';
+        } else {
+            summary += '<div style="background:#d1fae5;border:1px solid #10b981;color:#065f46;padding:10px 14px;border-radius:6px;margin-bottom:10px;font-weight:600;">';
+            summary += '\u2713 ' + restored.length + ' <?php echo esc_js(__('images restored', 'hozio-image-optimizer')); ?>';
+            summary += '</div>';
+        }
         if (preservedCount > 0) {
             summary += '<div style="font-size:12px;color:#065f46;margin-bottom:6px;">\u2713 ' + preservedCount + ' <?php echo esc_js(__('kept their original attachment ID (frontend references work immediately)', 'hozio-image-optimizer')); ?></div>';
         }

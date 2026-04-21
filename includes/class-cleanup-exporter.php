@@ -338,7 +338,7 @@ class Hozio_Image_Optimizer_Cleanup_Exporter {
      * @param int    $batch_size Images to process in this request.
      * @return array|WP_Error
      */
-    public function restore_session_batch($token, $offset, $batch_size = 5) {
+    public function restore_session_batch($token, $offset, $batch_size = 1) {
         $session = get_transient($token);
         if (!$session) {
             return new WP_Error('session_expired', __('Restore session expired — please re-upload the ZIP.', 'hozio-image-optimizer'));
